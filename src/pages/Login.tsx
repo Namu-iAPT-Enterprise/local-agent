@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 
+// 게이트웨이 주소 (개발환경)
+const GATEWAY_URL = 'http://192.168.0.10:8080';
+
 interface LoginProps {
   onLogin: () => void;
   onSignup: () => void;
@@ -11,14 +14,44 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'admin') {
-      setError('');
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${GATEWAY_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: username, password }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError('아이디 또는 비밀번호가 올바르지 않습니다.');
+        } else {
+          setError(`로그인 실패: 서버 오류 (${response.status})`);
+        }
+        return;
+      }
+
+      const data = await response.json();
+      // 토큰 저장 (accessToken, refreshToken)
+      if (data.accessToken) {
+        sessionStorage.setItem('accessToken', data.accessToken);
+      }
+      if (data.refreshToken) {
+        sessionStorage.setItem('refreshToken', data.refreshToken);
+      }
+
       onLogin();
-    } else {
-      setError('Invalid username or password.');
+    } catch (err) {
+      setError('서버에 연결할 수 없습니다. 네트워크를 확인해주세요.');
+      console.error('[Login] API 호출 오류:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -85,10 +118,11 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+              disabled={isLoading}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
             >
               <LogIn size={16} />
-              Sign in
+              {isLoading ? '로그인 중...' : 'Sign in'}
             </button>
           </form>
         </div>
