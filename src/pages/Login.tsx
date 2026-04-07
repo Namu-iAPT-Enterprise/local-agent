@@ -2,61 +2,17 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 import { login, saveTokens } from '../api/auth';
 
-// 게이트웨이 주소 (개발환경)
-const GATEWAY_URL = 'http://192.168.0.10:8080';
-
 interface LoginProps {
   onLogin: () => void;
   onSignup: () => void;
 }
 
 export default function Login({ onLogin, onSignup }: LoginProps) {
-  const [userId, setUserId]       = useState('');
-  const [password, setPassword]   = useState('');
+  const [userId, setUserId]             = useState('');
+  const [password, setPassword]         = useState('');
   const [showPassword, setShowPassword] = useState(false);
-<<<<<<< Updated upstream
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
-    try {
-      const response = await fetch(`${GATEWAY_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: username, password }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          setError('아이디 또는 비밀번호가 올바르지 않습니다.');
-        } else {
-          setError(`로그인 실패: 서버 오류 (${response.status})`);
-        }
-        return;
-      }
-
-      const data = await response.json();
-      // 토큰 저장 (accessToken, refreshToken)
-      if (data.accessToken) {
-        sessionStorage.setItem('accessToken', data.accessToken);
-      }
-      if (data.refreshToken) {
-        sessionStorage.setItem('refreshToken', data.refreshToken);
-      }
-
-      onLogin();
-    } catch (err) {
-      setError('서버에 연결할 수 없습니다. 네트워크를 확인해주세요.');
-      console.error('[Login] API 호출 오류:', err);
-    } finally {
-      setIsLoading(false);
-=======
-  const [error, setError]         = useState('');
-  const [loading, setLoading]     = useState(false);
+  const [error, setError]               = useState('');
+  const [loading, setLoading]           = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,14 +28,12 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
       setError(msg.includes('401') || msg.includes('403') ? 'Invalid username or password.' : msg);
     } finally {
       setLoading(false);
->>>>>>> Stashed changes
     }
   };
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
       <div className="w-full max-w-sm">
-        {/* Logo / Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-600 text-white text-xl font-bold mb-3">
             N
@@ -88,7 +42,6 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Sign in to your NAMU LA account</p>
         </div>
 
-        {/* Card */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
@@ -136,15 +89,8 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
 
             <button
               type="submit"
-<<<<<<< Updated upstream
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
-            >
-              <LogIn size={16} />
-              {isLoading ? '로그인 중...' : 'Sign in'}
-=======
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
             >
               {loading ? (
                 <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
@@ -152,7 +98,6 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
                 <LogIn size={16} />
               )}
               {loading ? 'Signing in…' : 'Sign in'}
->>>>>>> Stashed changes
             </button>
           </form>
         </div>
