@@ -10,6 +10,7 @@ import { useLang } from './context/LanguageContext';
 import { useChat, ModelOption, LOCAL_MODELS } from './hooks/useChat';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ThinkingBlock from './components/ThinkingBlock';
+import { getAccessToken, logout as authLogout } from './api/auth';
 
 // ── Model selector dropdown ───────────────────────────────────────────────────
 
@@ -142,13 +143,21 @@ function ModelSelector({ selected, onChange }: ModelSelectorProps) {
 
 export default function App() {
   const [input, setInput] = useState('');
-  const [page, setPage] = useState<'login' | 'signup' | 'home' | 'settings'>('login');
+  const [page, setPage] = useState<'login' | 'signup' | 'home' | 'settings'>(
+    getAccessToken() ? 'home' : 'login'
+  );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelOption>(LOCAL_MODELS[0]);
   const { bgImage } = useTheme();
   const { tr } = useLang();
   const { messages, isStreaming, send, clear, stop } = useChat();
+
+  const handleLogout = async () => {
+    await authLogout();
+    clear();
+    setPage('login');
+  };
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -195,7 +204,7 @@ export default function App() {
   return (
     <div className="flex h-screen font-sans overflow-hidden">
       <div className="hidden md:flex">
-        <Sidebar onSettings={() => setPage('settings')} onNewChat={clear} />
+        <Sidebar onSettings={() => setPage('settings')} onNewChat={clear} onLogout={handleLogout} />
       </div>
 
       {mobileMenuOpen && (
@@ -204,6 +213,7 @@ export default function App() {
             <Sidebar
               onSettings={() => { setPage('settings'); setMobileMenuOpen(false); }}
               onNewChat={() => { clear(); setMobileMenuOpen(false); }}
+              onLogout={() => { handleLogout(); setMobileMenuOpen(false); }}
             />
           </div>
           <div className="flex-1 bg-black/40" onClick={() => setMobileMenuOpen(false)} />
@@ -227,8 +237,9 @@ export default function App() {
           </div>
 
           {hasMessages ? (
-            <div className="flex flex-col flex-1 overflow-hidden">
-              <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4">
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full max-w-2xl xl:max-w-3xl mx-auto px-4 sm:px-6">
+                <div className="flex-1 min-h-0 overflow-y-auto pt-6 pb-2 space-y-6">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     {msg.role === 'assistant' && (
@@ -241,13 +252,13 @@ export default function App() {
                         ? 'max-w-[75%] px-4 py-2.5 bg-blue-600 text-white rounded-br-sm whitespace-pre-wrap leading-relaxed'
                         : msg.error
                         ? 'max-w-[75%] px-4 py-2.5 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-bl-sm whitespace-pre-wrap leading-relaxed'
-                        : 'w-full max-w-[720px] px-1 py-1'
+                        : 'w-full'
                     }`}>
                       {msg.role === 'assistant' && !msg.error ? (() => {
                         const isLast = i === messages.length - 1;
                         const thinkingStreaming = isStreaming && isLast && !msg.content;
                         return (
-                          <div className="px-3 py-2">
+                          <div className="py-1">
                             {msg.thinking && (
                               <ThinkingBlock thinking={msg.thinking} isStreaming={thinkingStreaming} />
                             )}
@@ -279,21 +290,24 @@ export default function App() {
                   </div>
                 ))}
                 <div ref={messagesEndRef} />
-              </div>
+                </div>
 
-              <div className="flex-shrink-0 px-4 md:px-8 pb-5 pt-2">
-                <ChatInput {...chatInputProps} />
+                <div className="flex-shrink-0 pt-3 pb-4 md:pb-5">
+                  <ChatInput {...chatInputProps} />
+                </div>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col flex-1 items-center justify-center px-4 md:px-8 py-8 md:py-12 overflow-y-auto">
-              <h1 className="text-2xl md:text-4xl font-bold text-gray-900 dark:text-white mb-6 md:mb-8 text-center px-2">
-                {tr.greeting}
-              </h1>
-              <div className="w-full max-w-[800px]">
-                <ChatInput {...chatInputProps} />
-                <div className="mt-6 md:mt-8">
-                  <TemplateCards onSelect={(t) => setInput(t.description.replace('...', ''))} />
+            <div className="flex flex-col flex-1 min-h-0 items-center justify-center px-4 py-8 sm:px-8 md:px-12 md:py-12 lg:px-16 overflow-y-auto">
+              <div className="w-full max-w-3xl lg:max-w-4xl mx-auto flex flex-col items-center">
+                <h1 className="text-2xl md:text-4xl font-bold text-gray-900 dark:text-white mb-6 md:mb-8 text-center px-2">
+                  {tr.greeting}
+                </h1>
+                <div className="w-full max-w-[720px]">
+                  <ChatInput {...chatInputProps} />
+                  <div className="mt-6 md:mt-8 w-full">
+                    <TemplateCards onSelect={(t) => setInput(t.description.replace('...', ''))} />
+                  </div>
                 </div>
               </div>
             </div>

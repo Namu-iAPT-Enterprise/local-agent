@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, UserPlus } from 'lucide-react';
+import { signup, login, saveTokens } from '../api/auth';
 
 interface SignupProps {
   onSignup: () => void;
@@ -7,29 +8,33 @@ interface SignupProps {
 }
 
 export default function Signup({ onSignup, onLogin }: SignupProps) {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
+  const [userId, setUserId]       = useState('');
+  const [password, setPassword]   = useState('');
+  const [confirm, setConfirm]     = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError]         = useState('');
+  const [loading, setLoading]     = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !password || !confirm) {
-      setError('Please fill in all fields.');
-      return;
-    }
-    if (password !== confirm) {
-      setError('Passwords do not match.');
-      return;
-    }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
-      return;
-    }
+    if (!userId || !password || !confirm) { setError('Please fill in all fields.'); return; }
+    if (password !== confirm) { setError('Passwords do not match.'); return; }
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
+
     setError('');
-    onSignup();
+    setLoading(true);
+    try {
+      await signup({ userId, password });
+      // Auto-login after successful registration
+      const res = await login({ userId, password });
+      saveTokens(res);
+      onSignup();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Signup failed.';
+      setError(msg.includes('409') ? 'Username already exists.' : msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,26 +60,14 @@ export default function Signup({ onSignup, onLogin }: SignupProps) {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Full name
+                Username
               </label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="John Doe"
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                placeholder="Username"
+                autoComplete="username"
                 className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               />
             </div>
@@ -89,6 +82,7 @@ export default function Signup({ onSignup, onLogin }: SignupProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Min. 8 characters"
+                  autoComplete="new-password"
                   className="w-full px-3 py-2.5 pr-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 />
                 <button
@@ -110,16 +104,22 @@ export default function Signup({ onSignup, onLogin }: SignupProps) {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 placeholder="••••••••"
+                autoComplete="new-password"
                 className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors"
             >
-              <UserPlus size={16} />
-              Create account
+              {loading ? (
+                <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              ) : (
+                <UserPlus size={16} />
+              )}
+              {loading ? 'Creating account…' : 'Create account'}
             </button>
           </form>
         </div>

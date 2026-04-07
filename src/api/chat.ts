@@ -1,4 +1,6 @@
-const BASE = 'http://localhost:8081';
+import { authHeaders } from './auth';
+
+const BASE = 'http://192.168.0.10:8080';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,7 +45,7 @@ export async function postChatMessage(
 ): Promise<SendMessageResponse> {
   const res = await fetch(`${BASE}/api/chat/message`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(req),
     signal,
   });
@@ -65,7 +67,7 @@ export async function* streamChatSession(
 ): AsyncGenerator<StreamEvent> {
   const url = `${BASE}/api/chat/stream?session_id=${encodeURIComponent(sessionId)}`;
   const res = await fetch(url, {
-    headers: { Accept: 'text/event-stream' },
+    headers: { Accept: 'text/event-stream', ...authHeaders() },
     signal,
   });
   if (!res.ok || !res.body) throw new Error(`Server returned ${res.status}`);
@@ -110,7 +112,9 @@ export async function* streamChatSession(
  * Returns the full message history for a session.
  */
 export async function getChatHistory(sessionId: string): Promise<HistoryMessage[]> {
-  const res = await fetch(`${BASE}/api/chat/history/${encodeURIComponent(sessionId)}`);
+  const res = await fetch(`${BASE}/api/chat/history/${encodeURIComponent(sessionId)}`, {
+    headers: { ...authHeaders() },
+  });
   if (!res.ok) throw new Error(`Server returned ${res.status}`);
   return res.json();
 }
@@ -122,6 +126,7 @@ export async function getChatHistory(sessionId: string): Promise<HistoryMessage[
 export async function deleteChatHistory(sessionId: string): Promise<void> {
   const res = await fetch(`${BASE}/api/chat/history/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
+    headers: { ...authHeaders() },
   });
   if (!res.ok) throw new Error(`Server returned ${res.status}`);
 }

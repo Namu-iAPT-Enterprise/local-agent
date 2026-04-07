@@ -76,6 +76,23 @@ function CodeBlock({
   );
 }
 
+// ── Normalize inline markdown ───────────────────────────────────────────────
+// Models sometimes stream headings/lists without leading newlines.
+// ReactMarkdown requires block elements to start on their own line.
+
+function normalizeMarkdown(raw: string): string {
+  return raw
+    // Ensure headings start on a new line
+    .replace(/([^\n])(#{1,6} )/g, '$1\n\n$2')
+    // Ensure unordered list items start on a new line
+    .replace(/([^\n])([-*+] )/g, '$1\n$2')
+    // Ensure ordered list items start on a new line
+    .replace(/([^\n])(\d+\. )/g, '$1\n$2')
+    // Collapse 3+ blank lines to 2
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // ── Main renderer ──────────────────────────────────────────────────────────
 
 interface Props {
@@ -86,60 +103,60 @@ export default function MarkdownRenderer({ content }: Props) {
   const components: Components = {
     // ── Headings ──
     h1: ({ children }) => (
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-5 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700">
+      <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-6 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
         {children}
       </h1>
     ),
     h2: ({ children }) => (
-      <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mt-4 mb-2">
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mt-5 mb-2.5 pb-1 border-b border-gray-100 dark:border-gray-800">
         {children}
       </h2>
     ),
     h3: ({ children }) => (
-      <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">
+      <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100 mt-4 mb-2">
         {children}
       </h3>
     ),
     h4: ({ children }) => (
-      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-2 mb-1">
+      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mt-3 mb-1.5">
         {children}
       </h4>
     ),
 
     // ── Paragraph ──
     p: ({ children }) => (
-      <p className="text-gray-800 dark:text-gray-200 leading-relaxed mb-3">{children}</p>
+      <p className="text-gray-800 dark:text-gray-100 leading-7 mb-4 last:mb-0">{children}</p>
     ),
 
     // ── Lists ──
     ul: ({ children }) => (
-      <ul className="list-disc list-outside ml-5 mb-3 space-y-1 text-gray-800 dark:text-gray-200">
+      <ul className="list-disc list-outside ml-6 mb-4 space-y-1.5 text-gray-800 dark:text-gray-100">
         {children}
       </ul>
     ),
     ol: ({ children }) => (
-      <ol className="list-decimal list-outside ml-5 mb-3 space-y-1 text-gray-800 dark:text-gray-200">
+      <ol className="list-decimal list-outside ml-6 mb-4 space-y-1.5 text-gray-800 dark:text-gray-100">
         {children}
       </ol>
     ),
-    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+    li: ({ children }) => <li className="leading-7 pl-1">{children}</li>,
 
     // ── Blockquote ──
     blockquote: ({ children }) => (
-      <blockquote className="border-l-4 border-blue-400 pl-4 py-1 my-3 bg-blue-50 dark:bg-blue-950/20 rounded-r-lg text-gray-700 dark:text-gray-300 italic">
+      <blockquote className="border-l-4 border-blue-400 pl-4 py-0.5 my-4 bg-blue-50 dark:bg-blue-950/20 rounded-r-lg text-gray-700 dark:text-gray-300 italic">
         {children}
       </blockquote>
     ),
 
     // ── Horizontal rule ──
-    hr: () => <hr className="border-gray-200 dark:border-gray-700 my-4" />,
+    hr: () => <hr className="border-gray-200 dark:border-gray-700 my-5" />,
 
     // ── Strong / Em ──
     strong: ({ children }) => (
       <strong className="font-semibold text-gray-900 dark:text-white">{children}</strong>
     ),
     em: ({ children }) => (
-      <em className="italic text-gray-700 dark:text-gray-300">{children}</em>
+      <em className="italic text-gray-600 dark:text-gray-300">{children}</em>
     ),
 
     // ── Links ──
@@ -225,9 +242,9 @@ export default function MarkdownRenderer({ content }: Props) {
   };
 
   return (
-    <div className="markdown-body text-sm leading-relaxed">
+    <div className="markdown-body text-[0.9rem] leading-7 text-gray-800 dark:text-gray-100">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
+        {normalizeMarkdown(content)}
       </ReactMarkdown>
     </div>
   );

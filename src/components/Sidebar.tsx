@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Plus, Search, Settings, LayoutList, PanelLeftClose, PanelLeftOpen, Inbox } from 'lucide-react';
+import { Plus, Search, Settings, LayoutList, PanelLeftClose, PanelLeftOpen, Inbox, LogOut } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useLang } from '../context/LanguageContext';
 
 interface SidebarProps {
   onSettings?: () => void;
   onNewChat?: () => void;
+  onLogout?: () => void;
 }
 
-export default function Sidebar({ onSettings, onNewChat }: SidebarProps) {
+export default function Sidebar({ onSettings, onNewChat, onLogout }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const { bgImage } = useTheme();
   const { tr } = useLang();
@@ -86,8 +87,8 @@ export default function Sidebar({ onSettings, onNewChat }: SidebarProps) {
         {!collapsed && <span className="text-sm">{tr.noChatHistory}</span>}
       </div>
 
-      {/* Bottom: Settings */}
-      <div className="px-2 pb-5">
+      {/* Bottom: Settings + Logout */}
+      <div className="px-2 pb-5 flex flex-col gap-1">
         <button
           onClick={onSettings}
           className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm ${collapsed ? 'justify-center' : ''}`}
@@ -95,6 +96,14 @@ export default function Sidebar({ onSettings, onNewChat }: SidebarProps) {
         >
           <Settings size={17} />
           {!collapsed && tr.settings}
+        </button>
+        <button
+          onClick={onLogout}
+          className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-500 transition-colors text-sm ${collapsed ? 'justify-center' : ''}`}
+          title={collapsed ? 'Logout' : undefined}
+        >
+          <LogOut size={17} />
+          {!collapsed && 'Logout'}
         </button>
       </div>
     </aside>

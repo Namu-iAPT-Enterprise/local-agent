@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { login, saveTokens } from '../api/auth';
 
 // 게이트웨이 주소 (개발환경)
 const GATEWAY_URL = 'http://192.168.0.10:8080';
@@ -10,9 +11,10 @@ interface LoginProps {
 }
 
 export default function Login({ onLogin, onSignup }: LoginProps) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [userId, setUserId]       = useState('');
+  const [password, setPassword]   = useState('');
   const [showPassword, setShowPassword] = useState(false);
+<<<<<<< Updated upstream
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -52,6 +54,25 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
       console.error('[Login] API 호출 오류:', err);
     } finally {
       setIsLoading(false);
+=======
+  const [error, setError]         = useState('');
+  const [loading, setLoading]     = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId || !password) { setError('Please fill in all fields.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      const res = await login({ userId, password });
+      saveTokens(res);
+      onLogin();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Login failed.';
+      setError(msg.includes('401') || msg.includes('403') ? 'Invalid username or password.' : msg);
+    } finally {
+      setLoading(false);
+>>>>>>> Stashed changes
     }
   };
 
@@ -82,9 +103,10 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
               </label>
               <input
                 type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
                 placeholder="Username"
+                autoComplete="username"
                 className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               />
             </div>
@@ -99,6 +121,7 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  autoComplete="current-password"
                   className="w-full px-3 py-2.5 pr-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 />
                 <button
@@ -109,20 +132,27 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              <div className="text-right mt-1.5">
-                <button type="button" className="text-xs text-blue-500 hover:underline">
-                  Forgot password?
-                </button>
-              </div>
             </div>
 
             <button
               type="submit"
+<<<<<<< Updated upstream
               disabled={isLoading}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
             >
               <LogIn size={16} />
               {isLoading ? '로그인 중...' : 'Sign in'}
+=======
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors"
+            >
+              {loading ? (
+                <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              ) : (
+                <LogIn size={16} />
+              )}
+              {loading ? 'Signing in…' : 'Sign in'}
+>>>>>>> Stashed changes
             </button>
           </form>
         </div>
