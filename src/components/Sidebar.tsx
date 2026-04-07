@@ -5,9 +5,10 @@ import { useLang } from '../context/LanguageContext';
 
 interface SidebarProps {
   onSettings?: () => void;
+  onNewChat?: () => void;
 }
 
-export default function Sidebar({ onSettings }: SidebarProps) {
+export default function Sidebar({ onSettings, onNewChat }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const { bgImage } = useTheme();
   const { tr } = useLang();
@@ -56,6 +57,7 @@ export default function Sidebar({ onSettings }: SidebarProps) {
       {/* New Chat + list toggle */}
       <div className={`flex items-center gap-2 mt-3 px-3`}>
         <button
+          onClick={onNewChat}
           className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 transition-colors text-sm font-medium text-gray-800 ${collapsed ? 'justify-center w-full' : 'flex-1'}`}
           title={collapsed ? tr.newChat : undefined}
         >
