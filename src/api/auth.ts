@@ -1,4 +1,4 @@
-const BASE = 'http://192.168.0.10:8080';
+const BASE = 'http://192.168.0.6:8080';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -22,9 +22,12 @@ export interface MeResponse {
 
 const ACCESS_KEY  = 'namu_access_token';
 const REFRESH_KEY = 'namu_refresh_token';
+const USER_ID_KEY = 'namu_user_id';
 
 export function getAccessToken(): string | null  { return localStorage.getItem(ACCESS_KEY); }
 export function getRefreshToken(): string | null { return localStorage.getItem(REFRESH_KEY); }
+export function getUserId(): string | null        { return localStorage.getItem(USER_ID_KEY); }
+export function saveUserId(userId: string)        { localStorage.setItem(USER_ID_KEY, userId); }
 
 export function saveTokens(res: AuthResponse) {
   localStorage.setItem(ACCESS_KEY,  res.accessToken);
@@ -34,6 +37,7 @@ export function saveTokens(res: AuthResponse) {
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(USER_ID_KEY);
 }
 
 export function authHeaders(): Record<string, string> {
@@ -90,6 +94,37 @@ export async function refreshTokens(): Promise<AuthResponse> {
   });
   if (!res.ok) throw new Error(`Token refresh failed (${res.status})`);
   return res.json();
+}
+
+/**
+ * Wrapper around fetch that:
+ *  1. Attaches the current Bearer token.
+ *  2. On 401, attempts a silent token refresh and retries once.
+ *  3. If refresh also fails, clears tokens and fires 'auth:expired' so the app redirects to login.
+ */
+export async function fetchWithAuth(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
+  const doFetch = (token: string | null) => fetch(input, {
+    ...init,
+    headers: {
+      ...(init.headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  let res = await doFetch(getAccessToken());
+
+  if (res.status === 401) {
+    try {
+      const refreshed = await refreshTokens();
+      saveTokens(refreshed);
+      res = await doFetch(refreshed.accessToken);
+    } catch {
+      clearTokens();
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
+  }
+
+  return res;
 }
 
 export async function getMe(): Promise<MeResponse> {

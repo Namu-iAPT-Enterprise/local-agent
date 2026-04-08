@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
-import { login, saveTokens } from '../api/auth';
+import { login, saveTokens, saveUserId } from '../api/auth';
 
 interface LoginProps {
-  onLogin: () => void;
+  onLogin: (userId: string) => void;
   onSignup: () => void;
 }
 
@@ -22,7 +22,8 @@ export default function Login({ onLogin, onSignup }: LoginProps) {
     try {
       const data = await login({ userId, password });
       saveTokens(data);
-      onLogin();
+      saveUserId(userId);
+      onLogin(userId);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes('401') || message.toLowerCase().includes('failed')) {

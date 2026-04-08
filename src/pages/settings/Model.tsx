@@ -328,7 +328,7 @@ export default function Model() {
         m.id === editingModel.id ? { ...editingModel, ...data, status: 'untested' } : m
       ));
     } else {
-      setModels((prev) => [...prev, { ...data, id: crypto.randomUUID(), status: 'untested' }]);
+      setModels((prev) => [...prev, { ...data, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, status: 'untested' }]);
     }
     setEditingModel(null);
   };

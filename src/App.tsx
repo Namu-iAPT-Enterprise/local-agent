@@ -11,6 +11,45 @@ import { useChat, ModelOption, LOCAL_MODELS } from './hooks/useChat';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ThinkingBlock from './components/ThinkingBlock';
 import { getAccessToken, logout as authLogout } from './api/auth';
+import type { ChatSessionInfo } from './api/chat';
+
+// ── Code detection for user messages ─────────────────────────────────────────
+
+function detectCodeLanguage(text: string): string | null {
+  const t = text.trim();
+  if (/<!DOCTYPE\s+html/i.test(t) || /^<html[\s>]/i.test(t)) return 'html';
+  if (/<\/?(?:html|head|body|div|span|p|a|ul|ol|li|h[1-6]|table|tr|td|th|form|input|button|script|style|link|meta|img|nav|section|article|header|footer|main)\b/i.test(t) && t.includes('</')) return 'html';
+  if (/public\s+class\s+\w+/.test(t) || /public\s+static\s+void\s+main/.test(t)) return 'java';
+  if (/^\s*(?:import\s+React|const\s+\w+\s*=|function\s+\w+\s*\(|export\s+default|export\s+(?:const|function))/m.test(t)) return 'tsx';
+  if (/^\s*(?:def\s+\w+\s*\(|import\s+\w+|from\s+\w+\s+import|class\s+\w+\s*:)/m.test(t)) return 'python';
+  if (/^\s*(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\s/im.test(t)) return 'sql';
+  if (/^\s*(?:#include|int\s+main\s*\(|void\s+\w+\s*\()/m.test(t)) return 'cpp';
+  if (/^\s*(?:func\s+\w+|package\s+\w+|import\s+")/m.test(t)) return 'go';
+  if (/^\s*(?:\{|\[)[\s\S]*(?:\}|\])$/.test(t) && (() => { try { JSON.parse(t); return true; } catch { return false; } })()) return 'json';
+  return null;
+}
+
+function UserMessage({ content }: { content: string }) {
+  const hasFences = /```/.test(content);
+  const detectedLang = !hasFences ? detectCodeLanguage(content) : null;
+
+  if (hasFences || detectedLang) {
+    const mdContent = hasFences ? content : `\`\`\`${detectedLang}\n${content}\n\`\`\``;
+    return (
+      <div className="max-w-[80%] bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-br-sm overflow-hidden">
+        <div className="px-4 py-3">
+          <MarkdownRenderer content={mdContent} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-[75%] px-4 py-2.5 bg-blue-600 text-white rounded-2xl rounded-br-sm whitespace-pre-wrap leading-relaxed text-sm">
+      {content}
+    </div>
+  );
+}
 
 // ── Model selector dropdown ───────────────────────────────────────────────────
 
@@ -149,14 +188,46 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelOption>(LOCAL_MODELS[0]);
+  const [sessionRefresh, setSessionRefresh] = useState(0);
   const { bgImage } = useTheme();
   const { tr } = useLang();
-  const { messages, isStreaming, send, clear, stop } = useChat();
+  const { messages, isStreaming, send, clear, stop, loadSession, sessionId } = useChat();
+
+  // Redirect to login when token refresh fails across the app
+  useEffect(() => {
+    const handler = () => { clear(); setPage('login'); };
+    window.addEventListener('auth:expired', handler);
+    return () => window.removeEventListener('auth:expired', handler);
+  }, [clear]);
+
+  // Refresh session list after streaming ends — delay to let async DB save complete
+  const prevStreaming = useRef(false);
+  useEffect(() => {
+    if (prevStreaming.current && !isStreaming) {
+      const timer = setTimeout(() => setSessionRefresh((n) => n + 1), 800);
+      return () => clearTimeout(timer);
+    }
+    prevStreaming.current = isStreaming;
+  }, [isStreaming]);
+
+  const handleLogin = (_uid: string) => {
+    setPage('home');
+    setSessionRefresh((n) => n + 1);
+  };
 
   const handleLogout = async () => {
     await authLogout();
     clear();
     setPage('login');
+  };
+
+  const handleSelectSession = async (session: ChatSessionInfo) => {
+    const restoredModel = await loadSession(session.id, {
+      modelName: session.modelName,
+      platform: session.platform,
+    });
+    if (restoredModel) setSelectedModel(restoredModel);
+    setMobileMenuOpen(false);
   };
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -180,8 +251,8 @@ export default function App() {
     }
   };
 
-  if (page === 'login')    return <Login onLogin={() => setPage('home')} onSignup={() => setPage('signup')} />;
-  if (page === 'signup')   return <Signup onSignup={() => setPage('home')} onLogin={() => setPage('login')} />;
+  if (page === 'login')    return <Login onLogin={handleLogin} onSignup={() => setPage('signup')} />;
+  if (page === 'signup')   return <Signup onSignup={handleLogin} onLogin={() => setPage('login')} />;
   if (page === 'settings') return <Settings onBack={() => setPage('home')} />;
 
   const hasMessages = messages.length > 0;
@@ -204,7 +275,14 @@ export default function App() {
   return (
     <div className="flex h-screen font-sans overflow-hidden">
       <div className="hidden md:flex">
-        <Sidebar onSettings={() => setPage('settings')} onNewChat={clear} onLogout={handleLogout} />
+        <Sidebar
+          onSettings={() => setPage('settings')}
+          onNewChat={() => { clear(); setSessionRefresh((n) => n + 1); }}
+          onLogout={handleLogout}
+          onSelectSession={handleSelectSession}
+          activeSessionId={sessionId}
+          refreshTrigger={sessionRefresh}
+        />
       </div>
 
       {mobileMenuOpen && (
@@ -212,8 +290,11 @@ export default function App() {
           <div className="w-64 flex-shrink-0">
             <Sidebar
               onSettings={() => { setPage('settings'); setMobileMenuOpen(false); }}
-              onNewChat={() => { clear(); setMobileMenuOpen(false); }}
+              onNewChat={() => { clear(); setSessionRefresh((n) => n + 1); setMobileMenuOpen(false); }}
               onLogout={() => { handleLogout(); setMobileMenuOpen(false); }}
+              onSelectSession={handleSelectSession}
+              activeSessionId={sessionId}
+              refreshTrigger={sessionRefresh}
             />
           </div>
           <div className="flex-1 bg-black/40" onClick={() => setMobileMenuOpen(false)} />
@@ -247,10 +328,11 @@ export default function App() {
                         N
                       </div>
                     )}
+                    {msg.role === 'user' ? (
+                      <UserMessage content={msg.content} />
+                    ) : (
                     <div className={`rounded-2xl text-sm ${
-                      msg.role === 'user'
-                        ? 'max-w-[75%] px-4 py-2.5 bg-blue-600 text-white rounded-br-sm whitespace-pre-wrap leading-relaxed'
-                        : msg.error
+                      msg.error
                         ? 'max-w-[75%] px-4 py-2.5 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-bl-sm whitespace-pre-wrap leading-relaxed'
                         : 'w-full'
                     }`}>
@@ -287,6 +369,7 @@ export default function App() {
                         );
                       })() : msg.content}
                     </div>
+                    )}
                   </div>
                 ))}
                 <div ref={messagesEndRef} />

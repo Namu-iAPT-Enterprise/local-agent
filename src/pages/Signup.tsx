@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, UserPlus } from 'lucide-react';
-import { signup, login, saveTokens } from '../api/auth';
+import { signup, login, saveTokens, saveUserId } from '../api/auth';
 
 interface SignupProps {
-  onSignup: () => void;
+  onSignup: (userId: string) => void;
   onLogin: () => void;
 }
 
@@ -28,7 +28,8 @@ export default function Signup({ onSignup, onLogin }: SignupProps) {
       // Auto-login after successful registration
       const res = await login({ userId, password });
       saveTokens(res);
-      onSignup();
+      saveUserId(userId);
+      onSignup(userId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Signup failed.';
       setError(msg.includes('409') ? 'Username already exists.' : msg);

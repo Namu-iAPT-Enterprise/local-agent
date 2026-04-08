@@ -2,30 +2,24 @@ import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Copy, Check, FileCode, File } from 'lucide-react';
+import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Copy, Check, Play } from 'lucide-react';
 import type { Components } from 'react-markdown';
 
-// ── Copy button ────────────────────────────────────────────────────────────
+// ── Language display name ──────────────────────────────────────────────────
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const handle = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <button
-      onClick={handle}
-      title="Copy"
-      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-    >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
-      {copied ? 'Copied' : 'Copy'}
-    </button>
-  );
-}
+const LANG_LABELS: Record<string, string> = {
+  js: 'JavaScript', javascript: 'JavaScript',
+  ts: 'TypeScript', typescript: 'TypeScript',
+  tsx: 'TypeScript', jsx: 'JavaScript',
+  py: 'Python', python: 'Python',
+  html: 'HTML', css: 'CSS',
+  json: 'JSON', yaml: 'YAML', yml: 'YAML',
+  sh: 'Shell', bash: 'Bash', zsh: 'Shell',
+  sql: 'SQL', go: 'Go', rust: 'Rust',
+  java: 'Java', cpp: 'C++', c: 'C',
+  rb: 'Ruby', ruby: 'Ruby', php: 'PHP',
+};
 
 // ── Fenced code block ──────────────────────────────────────────────────────
 
@@ -38,36 +32,59 @@ function CodeBlock({
   filename?: string;
   code: string;
 }) {
-  const label = filename || (language ? language : 'code');
-  const isFile = !!filename;
+  const [copied, setCopied] = useState(false);
+  const isDark = document.documentElement.classList.contains('dark');
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const label = filename || LANG_LABELS[language?.toLowerCase()] || (language ? language.charAt(0).toUpperCase() + language.slice(1) : 'Code');
 
   return (
-    <div className="rounded-xl overflow-hidden border border-gray-700 my-3 text-sm">
+    <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 my-3 text-sm bg-white dark:bg-gray-900">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#1e1e2e] border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          {isFile ? (
-            <File size={13} className="text-blue-400 flex-shrink-0" />
-          ) : (
-            <FileCode size={13} className="text-gray-400 flex-shrink-0" />
-          )}
-          <span className="text-xs font-mono text-gray-300 truncate">{label}</span>
+      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          {/* </> icon */}
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
+          </svg>
+          <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{label}</span>
         </div>
-        <CopyButton text={code} />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleCopy}
+            title={copied ? 'Copied!' : 'Copy code'}
+            className="p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+          <button
+            title="Run"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            <Play size={12} className="fill-current" />
+            Run
+          </button>
+        </div>
       </div>
 
       {/* Syntax-highlighted body */}
       <SyntaxHighlighter
         language={language || 'text'}
-        style={oneDark}
+        style={isDark ? oneDark : oneLight}
         customStyle={{
           margin: 0,
           borderRadius: 0,
-          fontSize: '0.8rem',
-          background: '#1a1b26',
-          padding: '1rem',
+          fontSize: '0.82rem',
+          background: 'transparent',
+          padding: '1.1rem 1.25rem',
         }}
-        showLineNumbers={code.split('\n').length > 5}
+        showLineNumbers={false}
         wrapLongLines={false}
       >
         {code}
@@ -80,8 +97,43 @@ function CodeBlock({
 // Models sometimes stream headings/lists without leading newlines.
 // ReactMarkdown requires block elements to start on their own line.
 
+// ── Fix unfenced code that models output without backticks ──────────────────
+// e.g. model writes: "...here's the code: html<!DOCTYPE html>..."
+// instead of:        "...here's the code:\n```html\n<!DOCTYPE html>..."
+
+function fixUnfencedCode(text: string): string {
+  // Language name immediately before recognizable code start (model forgot the fences)
+  const rules: [RegExp, string][] = [
+    [/\b(html)\s*(?=<!DOCTYPE\b|<html\b)/gi,            'html'],
+    [/\b(css)\s*(?=[a-zA-Z*#.[\s][^{]*\{)/g,            'css'],
+    [/\b(javascript|js)\s*(?=(?:const|let|var|function|import|export|class)\s)/gi, 'javascript'],
+    [/\b(typescript|ts)\s*(?=(?:const|let|var|function|import|export|interface|type)\s)/gi, 'typescript'],
+    [/\b(python|py)\s*(?=(?:import|from|def|class|#!)\s)/gi, 'python'],
+    [/\b(java)\s*(?=(?:public|import|package)\s)/g,     'java'],
+    [/\b(bash|shell|sh)\s*(?=#!\/)/gi,                  'bash'],
+    [/\b(sql)\s*(?=(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP)\s)/gi, 'sql'],
+    [/\b(json)\s*(?=[\[{])/gi,                          'json'],
+    [/\b(go)\s*(?=package\s)/g,                         'go'],
+    [/\b(rust)\s*(?=fn\s)/g,                            'rust'],
+    [/\b(cpp|c\+\+)\s*(?=#include\b)/gi,                'cpp'],
+    [/\b(php)\s*(?=<\?php\b)/gi,                        'php'],
+  ];
+
+  let result = text;
+  for (const [pattern, lang] of rules) {
+    result = result.replace(pattern, `\n\`\`\`${lang}\n`);
+  }
+
+  // Close any unclosed fences at end of string
+  const opens = (result.match(/^```\w/gm) || []).length;
+  const closes = (result.match(/^```\s*$/gm) || []).length;
+  if (opens > closes) result += '\n```';
+
+  return result;
+}
+
 function normalizeMarkdown(raw: string): string {
-  return raw
+  return fixUnfencedCode(raw)
     // Ensure headings start on a new line
     .replace(/([^\n])(#{1,6} )/g, '$1\n\n$2')
     // Ensure unordered list items start on a new line

@@ -1,6 +1,6 @@
-import { authHeaders } from './auth';
+import { fetchWithAuth } from './auth';
 
-const BASE = 'http://192.168.0.10:8080';
+const BASE = 'http://192.168.0.6:8080';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -26,6 +26,16 @@ export interface HistoryMessage {
   timestamp: string;
 }
 
+export interface ChatSessionInfo {
+  id: string;
+  userId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  modelName?: string;
+  platform?: string;
+}
+
 export type StreamEventType = 'thinking' | 'message' | 'done' | 'error';
 
 export interface StreamEvent {
@@ -43,9 +53,9 @@ export async function postChatMessage(
   req: SendMessageRequest,
   signal?: AbortSignal,
 ): Promise<SendMessageResponse> {
-  const res = await fetch(`${BASE}/api/chat/message`, {
+  const res = await fetchWithAuth(`${BASE}/api/chat/message`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
     signal,
   });
@@ -66,8 +76,8 @@ export async function* streamChatSession(
   signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const url = `${BASE}/api/chat/stream?session_id=${encodeURIComponent(sessionId)}`;
-  const res = await fetch(url, {
-    headers: { Accept: 'text/event-stream', ...authHeaders() },
+  const res = await fetchWithAuth(url, {
+    headers: { Accept: 'text/event-stream' },
     signal,
   });
   if (!res.ok || !res.body) throw new Error(`Server returned ${res.status}`);
@@ -112,9 +122,7 @@ export async function* streamChatSession(
  * Returns the full message history for a session.
  */
 export async function getChatHistory(sessionId: string): Promise<HistoryMessage[]> {
-  const res = await fetch(`${BASE}/api/chat/history/${encodeURIComponent(sessionId)}`, {
-    headers: { ...authHeaders() },
-  });
+  const res = await fetchWithAuth(`${BASE}/api/chat/history/${encodeURIComponent(sessionId)}`);
   if (!res.ok) throw new Error(`Server returned ${res.status}`);
   return res.json();
 }
@@ -124,9 +132,18 @@ export async function getChatHistory(sessionId: string): Promise<HistoryMessage[
  * Clears the session history. Returns 204 No Content.
  */
 export async function deleteChatHistory(sessionId: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/chat/history/${encodeURIComponent(sessionId)}`, {
+  const res = await fetchWithAuth(`${BASE}/api/chat/history/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
-    headers: { ...authHeaders() },
   });
   if (!res.ok) throw new Error(`Server returned ${res.status}`);
+}
+
+/**
+ * GET /api/chat/sessions
+ * Returns the list of chat sessions for the current user, ordered by most recent.
+ */
+export async function getSessions(): Promise<ChatSessionInfo[]> {
+  const res = await fetchWithAuth(`${BASE}/api/chat/sessions`);
+  if (!res.ok) throw new Error(`Server returned ${res.status}`);
+  return res.json();
 }

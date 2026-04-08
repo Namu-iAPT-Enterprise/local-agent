@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { postChatMessage, streamChatSession } from '../api/chat';
+import { postChatMessage, streamChatSession, getChatHistory } from '../api/chat';
 import { streamAnthropicMessages, type AnthropicChatMessage } from '../api/anthropicClient';
 import {
   streamOpenAICompatibleChat,
@@ -65,6 +65,30 @@ function parseRaw(raw: string): { thinking: string; content: string } {
     thinking: raw.slice(6, closeIdx).trim(),
     content: raw.slice(closeIdx + 8).trimStart(),
   };
+}
+
+// ── Session→model persistence ─────────────────────────────────────────────────
+
+const SESSION_MODEL_KEY = 'namu_session_models';
+
+function saveSessionModel(sessionId: string, model: ModelOption) {
+  try {
+    const map: Record<string, ModelOption> = JSON.parse(localStorage.getItem(SESSION_MODEL_KEY) ?? '{}');
+    map[sessionId] = model;
+    // Keep last 200 sessions to avoid unbounded growth
+    const keys = Object.keys(map);
+    if (keys.length > 200) delete map[keys[0]];
+    localStorage.setItem(SESSION_MODEL_KEY, JSON.stringify(map));
+  } catch { /* ignore */ }
+}
+
+function getSessionModel(sessionId: string): ModelOption | null {
+  try {
+    const map: Record<string, ModelOption> = JSON.parse(localStorage.getItem(SESSION_MODEL_KEY) ?? '{}');
+    return map[sessionId] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function useChat() {
@@ -168,6 +192,7 @@ export function useChat() {
         const payload = { sessionId: effectiveSessionId, message: text, thinking, model: model.name };
         const { sessionId: newSessionId } = await postChatMessage(payload, controller.signal);
         setSessionId(newSessionId);
+        saveSessionModel(newSessionId, model);
 
         for await (const event of streamChatSession(newSessionId, controller.signal)) {
           consumeEvent(event);
@@ -252,5 +277,49 @@ export function useChat() {
     setIsStreaming(false);
   };
 
-  return { messages, isStreaming, send, clear, stop, sessionId };
+  /** Load a past session's history from the DB and restore it as the active session.
+   *  Returns the ModelOption that was used for this session.
+   *  Priority: localStorage map → backend hint (modelName/platform) → null. */
+  const loadSession = async (
+    sid: string,
+    backendHint?: { modelName?: string; platform?: string },
+  ): Promise<ModelOption | null> => {
+    if (isStreaming) return null;
+    try {
+      const history = await getChatHistory(sid);
+      const msgs: Message[] = history.map((m) => ({
+        role: m.role,
+        content: m.content,
+        thinking: m.thinking ?? undefined,
+      }));
+      abortRef.current = null;
+      rawRef.current = '';
+      prevRoutingRef.current = 'local';
+      setMessages(msgs);
+      setSessionId(sid);
+
+      const stored = getSessionModel(sid);
+      if (stored) return stored;
+
+      // Fall back to fields returned by the backend
+      if (backendHint?.modelName) {
+        const local = LOCAL_MODELS.find((m) => m.name === backendHint.modelName);
+        if (local) return local;
+        // API model — reconstruct a minimal ModelOption so routing works
+        return {
+          id: sid,
+          name: backendHint.modelName,
+          platform: backendHint.platform ?? 'Custom',
+          isLocal: false,
+        };
+      }
+
+      return null;
+    } catch (err) {
+      console.error('[useChat] Failed to load session:', err);
+      return null;
+    }
+  };
+
+  return { messages, isStreaming, send, clear, stop, loadSession, sessionId };
 }
