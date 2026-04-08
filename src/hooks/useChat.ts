@@ -21,6 +21,11 @@ export const LOCAL_MODELS: ModelOption[] = [
   { id: 'qwen3.5-4b',  name: 'qwen3.5:4b',  platform: 'Ollama', isLocal: true },
 ];
 
+export interface AssistantVariant {
+  content: string;
+  thinking?: string;
+}
+
 export interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -28,6 +33,10 @@ export interface Message {
   /** 'connecting' = POST sent, waiting for sessionId/first token; 'streaming' = tokens arriving */
   status?: 'connecting' | 'streaming';
   error?: boolean;
+  /** Populated when the user regenerates a response — all variants including the original. */
+  variants?: AssistantVariant[];
+  /** Index into variants[] that is currently displayed. */
+  activeVariantIdx?: number;
 }
 
 /** Map raw server error strings to user-friendly messages. */
@@ -321,5 +330,128 @@ export function useChat() {
     }
   };
 
-  return { messages, isStreaming, send, clear, stop, loadSession, sessionId };
+  /**
+   * Re-generate the assistant message at targetIdx.
+   * The old response is saved as variant[0]; new response streams in as variant[1+].
+   * Everything after targetIdx is discarded (same branch behaviour as ChatGPT).
+   */
+  const regenerate = async (
+    targetIdx: number,
+    thinking = false,
+    model: ModelOption = LOCAL_MODELS[0],
+  ) => {
+    if (isStreaming) return;
+    const userMsg = messages[targetIdx - 1];
+    if (!userMsg || userMsg.role !== 'user') return;
+
+    const existingMsg = messages[targetIdx];
+    // Collect all prior variants + current content as the 0th variant
+    const prevVariants: AssistantVariant[] = existingMsg.variants?.length
+      ? [...existingMsg.variants]
+      : [{ content: existingMsg.content, thinking: existingMsg.thinking }];
+    const newVariantIdx = prevVariants.length;
+
+    rawRef.current = '';
+    setMessages((prev) => [
+      ...prev.slice(0, targetIdx),
+      { role: 'assistant', content: '', status: 'connecting', variants: prevVariants, activeVariantIdx: newVariantIdx },
+    ]);
+    setIsStreaming(true);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      let firstToken = true;
+      const consumeEvent = (event: { type: string; data: string }) => {
+        if (firstToken && (event.type === 'thinking' || event.type === 'message')) {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === 'assistant') return [...prev.slice(0, -1), { ...last, status: 'streaming' }];
+            return prev;
+          });
+          firstToken = false;
+        }
+        switch (event.type) {
+          case 'thinking': appendThinkingToken(event.data); break;
+          case 'message':  appendToken(event.data); break;
+          case 'error':    setLastAssistantError(friendlyError(event.data)); break;
+        }
+      };
+
+      if (model.isLocal) {
+        const payload = { sessionId, message: userMsg.content, thinking, model: model.name };
+        const { sessionId: newSid } = await postChatMessage(payload, controller.signal);
+        setSessionId(newSid);
+        for await (const event of streamChatSession(newSid, controller.signal)) {
+          consumeEvent(event);
+          if (event.type === 'done' || event.type === 'error') break;
+        }
+      } else {
+        const baseUrl = model.baseUrl?.trim() ?? '';
+        const apiKey  = model.apiKey?.trim() ?? '';
+        const keyOptional = model.platform === 'Ollama' || isOllamaOpenAICompatUrl(baseUrl);
+        if (!baseUrl) { setLastAssistantError('This model is missing a base URL. Add it in Settings → Model.'); return; }
+        if (!apiKey && !keyOptional) { setLastAssistantError('This model is missing an API key. Add it in Settings → Model.'); return; }
+        // Build context up to (not including) the assistant message being regenerated
+        const thread = messages.slice(0, targetIdx - 1);
+        const apiMessages = buildOpenAIMessages(thread, userMsg.content);
+        if (model.platform === 'Anthropic') {
+          for await (const event of streamAnthropicMessages({ baseUrl, apiKey, model: model.name, messages: apiMessages as AnthropicChatMessage[], signal: controller.signal })) {
+            consumeEvent(event);
+            if (event.type === 'done' || event.type === 'error') break;
+          }
+        } else {
+          for await (const event of streamOpenAICompatibleChat({ baseUrl, apiKey, model: model.name, messages: apiMessages, signal: controller.signal })) {
+            consumeEvent(event);
+            if (event.type === 'done' || event.type === 'error') break;
+          }
+        }
+      }
+
+      // Finalize: append the freshly-streamed content as a new variant
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.role !== 'assistant') return prev;
+        const newVariants = [...prevVariants, { content: last.content, thinking: last.thinking }];
+        return [...prev.slice(0, -1), { ...last, variants: newVariants, activeVariantIdx: newVariantIdx, status: undefined }];
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setLastAssistantError(friendlyError(err instanceof Error ? err.message : String(err)));
+    } finally {
+      abortRef.current = null;
+      setIsStreaming(false);
+    }
+  };
+
+  /** Switch which variant is displayed for an assistant message. */
+  const setVariant = (msgIdx: number, variantIdx: number) => {
+    setMessages((prev) => {
+      const msg = prev[msgIdx];
+      if (!msg?.variants || variantIdx < 0 || variantIdx >= msg.variants.length) return prev;
+      const v = msg.variants[variantIdx];
+      return [
+        ...prev.slice(0, msgIdx),
+        { ...msg, content: v.content, thinking: v.thinking, activeVariantIdx: variantIdx },
+        ...prev.slice(msgIdx + 1),
+      ];
+    });
+  };
+
+  /**
+   * Prepare to edit a user message:
+   * truncates the messages array up to (not including) targetIdx and returns the message text.
+   * The caller should put the returned text into the input box.
+   */
+  const prepareEdit = (targetIdx: number): string => {
+    if (isStreaming) return '';
+    const text = messages[targetIdx]?.content ?? '';
+    setMessages((prev) => prev.slice(0, targetIdx));
+    setSessionId(null);
+    prevRoutingRef.current = null;
+    return text;
+  };
+
+  return { messages, isStreaming, send, regenerate, setVariant, prepareEdit, clear, stop, loadSession, sessionId };
 }
