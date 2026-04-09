@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Plus, Menu, Brain, ChevronDown, Check, Copy, RefreshCw, ChevronLeft, ChevronRight, Pencil, Database } from 'lucide-react';
+import { ArrowUp, Plus, Menu, Brain, ChevronDown, Check, Copy, RefreshCw, ChevronLeft, ChevronRight, Pencil, Database, ShieldAlert } from 'lucide-react';
 import TemplateCards from './components/TemplateCards';
 import Sidebar from './components/Sidebar';
 import Settings from './pages/Settings';
@@ -11,8 +11,10 @@ import { useChat, ModelOption, LOCAL_MODELS } from './hooks/useChat';
 import type { AssistantVariant } from './hooks/useChat';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ThinkingBlock from './components/ThinkingBlock';
-import { getAccessToken, logout as authLogout } from './api/auth';
+import { getAccessToken, getAccountRole, saveAccountRole, logout as authLogout, getMe } from './api/auth';
 import type { ChatSessionInfo } from './api/chat';
+import { usePermissions } from './hooks/usePermissions';
+import FeatureCards from './components/FeatureCards';
 
 // ── Code detection for user messages ─────────────────────────────────────────
 
@@ -312,9 +314,13 @@ export default function App() {
   const [ragMode, setRagMode] = useState(true);
   const [selectedModel, setSelectedModel] = useState<ModelOption>(LOCAL_MODELS[0]);
   const [sessionRefresh, setSessionRefresh] = useState(0);
+  const [accountRole, setAccountRole] = useState<string | null>(getAccountRole());
   const { bgImage } = useTheme();
   const { tr } = useLang();
   const { messages, isStreaming, send, regenerate, setVariant, prepareEdit, clear, stop, loadSession, sessionId } = useChat();
+
+  const isLoggedIn = page === 'home' || page === 'settings';
+  const permissions = usePermissions(isLoggedIn);
 
   // Redirect to login when token refresh fails across the app
   useEffect(() => {
@@ -334,14 +340,23 @@ export default function App() {
     prevStreaming.current = isStreaming;
   }, [isStreaming]);
 
-  const handleLogin = (_uid: string) => {
+  const handleLogin = async (_uid: string) => {
     setPage('home');
     setSessionRefresh((n) => n + 1);
+    // Fetch account role (USER / ADMIN) and cache it
+    try {
+      const me = await getMe();
+      saveAccountRole(me.role);
+      setAccountRole(me.role);
+    } catch {
+      // Non-critical — gateway permissions will still load
+    }
   };
 
   const handleLogout = async () => {
     await authLogout();
     clear();
+    setAccountRole(null);
     setPage('login');
   };
 
@@ -541,7 +556,16 @@ export default function App() {
                 </h1>
                 <div className="w-full max-w-[720px]">
                   <ChatInput {...chatInputProps} />
-                  <div className="mt-6 md:mt-8 w-full">
+                  <div className="mt-6 md:mt-8 w-full space-y-6">
+                    {/* Feature cards — show/hide based on gateway permissions */}
+                    {(permissions.status !== 'idle') && (
+                      <FeatureCards
+                        status={permissions.status}
+                        allowedApis={permissions.allowedApis}
+                        permissionRoles={permissions.permissionRoles}
+                        accountRole={accountRole}
+                      />
+                    )}
                     <TemplateCards onSelect={(t) => setInput(t.description.replace('...', ''))} />
                   </div>
                 </div>
@@ -550,6 +574,14 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* Permission error toast — fixed bottom-right, never affects layout */}
+      {permissions.status === 'error' && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-3.5 py-2.5 rounded-xl shadow-lg border border-red-200 dark:border-red-800 bg-white dark:bg-gray-900 text-xs text-red-500 dark:text-red-400 pointer-events-none select-none">
+          <ShieldAlert size={13} className="flex-shrink-0" />
+          <span>역할 권한 서비스에 연결할 수 없습니다.</span>
+        </div>
+      )}
     </div>
   );
 }

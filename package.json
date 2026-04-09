@@ -28,7 +28,6 @@
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron-forge/plugin-vite": "^7.11.1",
     "@electron/fuses": "^1.8.0",
-    "@tailwindcss/postcss": "^4.2.2",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -38,13 +37,14 @@
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
     "postcss": "^8.5.8",
-    "tailwindcss": "^4.2.2",
-    "typescript": "~4.5.4",
+    "typescript": "^6.0.2",
     "vite": "^5.4.21"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "electron-squirrel-startup": "^1.0.1",
+    "lightningcss": "^1.32.0",
     "lucide-react": "^1.7.0",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^4.10.38",
@@ -53,6 +53,7 @@
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.1",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^4.2.2"
   }
 }
