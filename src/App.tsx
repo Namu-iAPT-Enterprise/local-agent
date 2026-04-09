@@ -601,8 +601,8 @@ function ChatInput({
           {/* Model dropdown */}
           <ModelSelector selected={selectedModel} onChange={onModelChange} />
 
-          {/* RAG toggle — only for local Ollama models */}
-          {selectedModel.isLocal && (
+          {/* RAG toggle — available for all models */}
+          {(
             <button
               onClick={onRagToggle}
               title={ragMode ? 'Knowledge base ON — click to disable' : 'Knowledge base OFF — click to enable'}

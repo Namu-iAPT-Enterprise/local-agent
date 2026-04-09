@@ -140,13 +140,13 @@ export function useChat() {
     try {
       let effectiveSessionId = sessionId;
       if (model.isLocal) {
-        if (prevRoutingRef.current === 'api') {
+        if (prevRoutingRef.current === 'api' && sessionId) {
           effectiveSessionId = null;
           setSessionId(null);
         }
         prevRoutingRef.current = 'local';
       } else {
-        if (prevRoutingRef.current === 'local') setSessionId(null);
+        if (prevRoutingRef.current === 'local' && sessionId) setSessionId(null);
         prevRoutingRef.current = 'api';
       }
 
@@ -425,7 +425,6 @@ export function useChat() {
     if (isStreaming) return '';
     const text = messages[targetIdx]?.content ?? '';
     setMessages((prev) => prev.slice(0, targetIdx));
-    setSessionId(null);
     prevRoutingRef.current = null;
     return text;
   };
