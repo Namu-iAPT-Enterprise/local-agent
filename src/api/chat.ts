@@ -1,6 +1,7 @@
 import { fetchWithAuth } from './auth';
+import { API_BASE } from '../config/apiBase';
 
-const BASE = 'http://192.168.0.6:8080';
+const BASE = API_BASE;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ export interface SendMessageRequest {
   platform?: string;
   apiKey?: string;
   baseUrl?: string;
+  useRag?: boolean;
 }
 
 export interface SendMessageResponse {

@@ -1,11 +1,6 @@
 import { useState, useRef } from 'react';
 import { postChatMessage, streamChatSession, getChatHistory } from '../api/chat';
-import { streamAnthropicMessages, type AnthropicChatMessage } from '../api/anthropicClient';
-import {
-  streamOpenAICompatibleChat,
-  type OpenAIChatMessage,
-  isOllamaOpenAICompatUrl,
-} from '../api/openaiClient';
+import { isOllamaOpenAICompatUrl } from '../api/openaiClient';
 
 export interface ModelOption {
   id: string;
@@ -18,7 +13,7 @@ export interface ModelOption {
 
 export const LOCAL_MODELS: ModelOption[] = [
   { id: 'qwen3-8b',    name: 'qwen3:8b',    platform: 'Ollama', isLocal: true },
-  { id: 'qwen3.5-4b',  name: 'qwen3.5:4b',  platform: 'Ollama', isLocal: true },
+  { id: 'exaone3.5-2.4b', name: 'exaone3.5:2.4b', platform: 'Ollama', isLocal: true },
 ];
 
 export interface AssistantVariant {
@@ -50,19 +45,6 @@ function friendlyError(raw: string): string {
   if (raw.includes('Failed to fetch') || raw.includes('Load failed') || raw.includes('NetworkError'))
     return 'Browser could not reach the API (often CORS). The provider must allow requests from this app’s origin, or use a local proxy.';
   return raw;
-}
-
-function buildOpenAIMessages(thread: Message[], newUserText: string): OpenAIChatMessage[] {
-  const out: OpenAIChatMessage[] = [];
-  for (const m of thread) {
-    if (m.role === 'user') {
-      if (m.content.trim()) out.push({ role: 'user', content: m.content });
-    } else if (m.role === 'assistant' && !m.error && m.content.trim()) {
-      out.push({ role: 'assistant', content: m.content });
-    }
-  }
-  out.push({ role: 'user', content: newUserText });
-  return out;
 }
 
 /** Parse <think>...</think> from a raw accumulated string. */
@@ -143,7 +125,7 @@ export function useChat() {
     });
   };
 
-  const send = async (text: string, thinking = false, model: ModelOption = LOCAL_MODELS[0]) => {
+  const send = async (text: string, thinking = false, model: ModelOption = LOCAL_MODELS[0], ragMode = true) => {
     if (isStreaming || !text.trim()) return;
 
     rawRef.current = '';
@@ -197,8 +179,8 @@ export function useChat() {
       };
 
       if (model.isLocal) {
-        // Ollama model name must be sent; otherwise main-server → llmServer uses its default (e.g. qwen3.5:4b).
-        const payload = { sessionId: effectiveSessionId, message: text, thinking, model: model.name };
+        // Ollama model name must be sent; otherwise main-server → llmServer uses its default (e.g. exaone3.5:2.4b).
+        const payload = { sessionId: effectiveSessionId, message: text, thinking, model: model.name, useRag: ragMode };
         const { sessionId: newSessionId } = await postChatMessage(payload, controller.signal);
         setSessionId(newSessionId);
         saveSessionModel(newSessionId, model);
@@ -221,34 +203,24 @@ export function useChat() {
           return;
         }
 
-        const apiMessages = buildOpenAIMessages(messages, text);
+        // Route through main-server to enable RAG support for API models
+        const payload = {
+          sessionId: effectiveSessionId,
+          message: text,
+          thinking,
+          model: model.name,
+          platform: model.platform,
+          baseUrl,
+          apiKey,
+          useRag: ragMode,
+        };
+        const { sessionId: newSessionId } = await postChatMessage(payload, controller.signal);
+        setSessionId(newSessionId);
+        saveSessionModel(newSessionId, model);
 
-        if (model.platform === 'Anthropic') {
-          if (!apiKey) {
-            setLastAssistantError('Anthropic requires an API key.');
-            return;
-          }
-          for await (const event of streamAnthropicMessages({
-            baseUrl,
-            apiKey,
-            model: model.name,
-            messages: apiMessages as AnthropicChatMessage[],
-            signal: controller.signal,
-          })) {
-            consumeEvent(event);
-            if (event.type === 'done' || event.type === 'error') break;
-          }
-        } else {
-          for await (const event of streamOpenAICompatibleChat({
-            baseUrl,
-            apiKey,
-            model: model.name,
-            messages: apiMessages,
-            signal: controller.signal,
-          })) {
-            consumeEvent(event);
-            if (event.type === 'done' || event.type === 'error') break;
-          }
+        for await (const event of streamChatSession(newSessionId, controller.signal)) {
+          consumeEvent(event);
+          if (event.type === 'done' || event.type === 'error') break;
         }
       }
     } catch (err) {
@@ -258,8 +230,8 @@ export function useChat() {
         if (last?.role === 'assistant' && last.content) return prev;
         const raw = err instanceof Error ? err.message : String(err);
         const errMsg =
-          model.isLocal && (raw.includes('Failed to fetch') || raw.includes('Load failed'))
-            ? 'Cannot reach the local server (port 8081). Is it running?'
+          (raw.includes('Failed to fetch') || raw.includes('Load failed'))
+            ? 'Cannot reach the API gateway (check VITE_API_BASE in .env and that the gateway is running).'
             : friendlyError(raw);
         if (last?.role === 'assistant') {
           return [...prev.slice(0, -1), { ...last, content: errMsg, error: true }];
@@ -339,6 +311,7 @@ export function useChat() {
     targetIdx: number,
     thinking = false,
     model: ModelOption = LOCAL_MODELS[0],
+    ragMode = true,
   ) => {
     if (isStreaming) return;
     const userMsg = messages[targetIdx - 1];
@@ -380,7 +353,7 @@ export function useChat() {
       };
 
       if (model.isLocal) {
-        const payload = { sessionId, message: userMsg.content, thinking, model: model.name };
+        const payload = { sessionId, message: userMsg.content, thinking, model: model.name, useRag: ragMode };
         const { sessionId: newSid } = await postChatMessage(payload, controller.signal);
         setSessionId(newSid);
         for await (const event of streamChatSession(newSid, controller.signal)) {
@@ -393,19 +366,23 @@ export function useChat() {
         const keyOptional = model.platform === 'Ollama' || isOllamaOpenAICompatUrl(baseUrl);
         if (!baseUrl) { setLastAssistantError('This model is missing a base URL. Add it in Settings → Model.'); return; }
         if (!apiKey && !keyOptional) { setLastAssistantError('This model is missing an API key. Add it in Settings → Model.'); return; }
-        // Build context up to (not including) the assistant message being regenerated
-        const thread = messages.slice(0, targetIdx - 1);
-        const apiMessages = buildOpenAIMessages(thread, userMsg.content);
-        if (model.platform === 'Anthropic') {
-          for await (const event of streamAnthropicMessages({ baseUrl, apiKey, model: model.name, messages: apiMessages as AnthropicChatMessage[], signal: controller.signal })) {
-            consumeEvent(event);
-            if (event.type === 'done' || event.type === 'error') break;
-          }
-        } else {
-          for await (const event of streamOpenAICompatibleChat({ baseUrl, apiKey, model: model.name, messages: apiMessages, signal: controller.signal })) {
-            consumeEvent(event);
-            if (event.type === 'done' || event.type === 'error') break;
-          }
+
+        // Route through main-server to enable RAG support for API models
+        const payload = {
+          sessionId,
+          message: userMsg.content,
+          thinking,
+          model: model.name,
+          platform: model.platform,
+          baseUrl,
+          apiKey,
+          useRag: ragMode,
+        };
+        const { sessionId: newSid } = await postChatMessage(payload, controller.signal);
+        setSessionId(newSid);
+        for await (const event of streamChatSession(newSid, controller.signal)) {
+          consumeEvent(event);
+          if (event.type === 'done' || event.type === 'error') break;
         }
       }
 

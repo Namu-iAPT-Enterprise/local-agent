@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
+import fs from 'node:fs';
 import started from 'electron-squirrel-startup';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -64,4 +65,26 @@ ipcMain.handle('get-local-ip', () => {
     }
   }
   return 'localhost';
+});
+
+// Open file dialog and return selected file paths
+ipcMain.handle('open-file-dialog', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Text Files', extensions: ['txt', 'md', 'json', 'csv', 'log'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  return result;
+});
+
+// Read file content
+ipcMain.handle('read-file', async (_event, filePath: string) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return { success: true, content };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
 });

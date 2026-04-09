@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Plus, Menu, Brain, ChevronDown, Check, Copy, RefreshCw, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { ArrowUp, Plus, Menu, Brain, ChevronDown, Check, Copy, RefreshCw, ChevronLeft, ChevronRight, Pencil, Database } from 'lucide-react';
 import TemplateCards from './components/TemplateCards';
 import Sidebar from './components/Sidebar';
 import Settings from './pages/Settings';
@@ -309,6 +309,7 @@ export default function App() {
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
+  const [ragMode, setRagMode] = useState(true);
   const [selectedModel, setSelectedModel] = useState<ModelOption>(LOCAL_MODELS[0]);
   const [sessionRefresh, setSessionRefresh] = useState(0);
   const { bgImage } = useTheme();
@@ -363,7 +364,7 @@ export default function App() {
     const text = input.trim();
     if (!text || isStreaming) return;
     setInput('');
-    send(text, thinkingMode, selectedModel);
+    send(text, thinkingMode, selectedModel, ragMode);
     textareaRef.current?.focus();
   };
 
@@ -387,6 +388,8 @@ export default function App() {
     isStreaming,
     thinkingMode,
     onThinkingToggle: () => setThinkingMode((v) => !v),
+    ragMode,
+    onRagToggle: () => setRagMode((v) => !v),
     selectedModel,
     onModelChange: setSelectedModel,
     onSend: handleSend,
@@ -514,7 +517,7 @@ export default function App() {
                           isStreaming={isStreaming}
                           variants={msg.variants}
                           activeVariantIdx={msg.activeVariantIdx}
-                          onRegenerate={() => regenerate(i, thinkingMode, selectedModel)}
+                          onRegenerate={() => regenerate(i, thinkingMode, selectedModel, ragMode)}
                           onVariantChange={(idx) => setVariant(i, idx)}
                         />
                       )}
@@ -560,6 +563,8 @@ interface ChatInputProps {
   isStreaming: boolean;
   thinkingMode: boolean;
   onThinkingToggle: () => void;
+  ragMode: boolean;
+  onRagToggle: () => void;
   selectedModel: ModelOption;
   onModelChange: (m: ModelOption) => void;
   onSend: () => void;
@@ -571,6 +576,7 @@ interface ChatInputProps {
 function ChatInput({
   textareaRef, input, setInput,
   isStreaming, thinkingMode, onThinkingToggle,
+  ragMode, onRagToggle,
   selectedModel, onModelChange,
   onSend, onStop, onKeyDown, placeholder,
 }: ChatInputProps) {
@@ -594,6 +600,22 @@ function ChatInput({
         <div className="flex items-center gap-2">
           {/* Model dropdown */}
           <ModelSelector selected={selectedModel} onChange={onModelChange} />
+
+          {/* RAG toggle — only for local Ollama models */}
+          {selectedModel.isLocal && (
+            <button
+              onClick={onRagToggle}
+              title={ragMode ? 'Knowledge base ON — click to disable' : 'Knowledge base OFF — click to enable'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                ragMode
+                  ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
+                  : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              <Database size={13} />
+              <span className="hidden sm:inline">Knowledge</span>
+            </button>
+          )}
 
           {/* Thinking toggle */}
           <button

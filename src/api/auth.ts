@@ -1,4 +1,6 @@
-const BASE = 'http://192.168.0.6:8080';
+import { API_BASE } from '../config/apiBase';
+
+const BASE = API_BASE;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

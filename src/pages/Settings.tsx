@@ -14,6 +14,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings as SettingsIcon,
+  Database,
 } from 'lucide-react';
 import Model from './settings/Model';
 import Assistants from './settings/Assistants';
@@ -22,10 +23,11 @@ import Display from './settings/Display';
 import Remote from './settings/Remote';
 import System from './settings/System';
 import About from './settings/About';
+import Knowledge from './settings/Knowledge';
 
-const TAB_IDS = ['model','assistants','skills-hub','display','remote','system','about'] as const;
-const TAB_ICONS = { model: Cpu, assistants: Users, 'skills-hub': Zap, display: Monitor, remote: Globe, system: LayoutGrid, about: Info };
-const TAB_COMPONENTS = { model: Model, assistants: Assistants, 'skills-hub': SkillsHub, display: Display, remote: Remote, system: System, about: About };
+const TAB_IDS = ['model','assistants','skills-hub','display','remote','system','knowledge','about'] as const;
+const TAB_ICONS = { model: Cpu, assistants: Users, 'skills-hub': Zap, display: Monitor, remote: Globe, system: LayoutGrid, knowledge: Database, about: Info };
+const TAB_COMPONENTS = { model: Model, assistants: Assistants, 'skills-hub': SkillsHub, display: Display, remote: Remote, system: System, knowledge: Knowledge, about: About };
 
 interface SettingsProps {
   onBack: () => void;
@@ -39,7 +41,7 @@ export default function Settings({ onBack }: SettingsProps) {
 
   const tabLabels: Record<string, string> = {
     model: tr.model, assistants: tr.assistants, 'skills-hub': tr.skillsHub,
-    display: tr.display, remote: tr.remote, system: tr.system, about: tr.about,
+    display: tr.display, remote: tr.remote, system: tr.system, knowledge: tr.knowledge, about: tr.about,
   };
   const tabs = TAB_IDS.map((id) => ({ id, label: tabLabels[id], icon: TAB_ICONS[id], component: TAB_COMPONENTS[id] }));
   const ActiveComponent = TAB_COMPONENTS[activeTab as keyof typeof TAB_COMPONENTS] ?? Model;

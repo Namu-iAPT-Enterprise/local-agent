@@ -80,6 +80,19 @@ export type Translations = {
   // About
   checkForUpdates: string;
   check: string;
+  // Knowledge tab
+  knowledge: string;
+  injectData: string;
+  injectDataDescription: string;
+  documentText: string;
+  documentMetadata: string;
+  metadataHelp: string;
+  ingest: string;
+  ingestSuccess: string;
+  ingestError: string;
+  batchIngest: string;
+  batchIngestDescription: string;
+  documentsIngested: string;
 };
 
 const t: Record<LangCode, Translations> = {
@@ -106,6 +119,20 @@ const t: Record<LangCode, Translations> = {
     qrScanHint: 'Scan the QR code with your phone to log in automatically on mobile browser',
     createAssistant: 'Create Assistant', availableAssistants: 'Available assistants',
     checkForUpdates: 'Check for Updates', check: 'Check',
+    knowledge: 'Knowledge', injectData: 'Inject Data',
+    injectDataDescription: 'Add documents to the ChromaDB vector store for RAG (Retrieval Augmented Generation).',
+    documentText: 'Document Text', documentMetadata: 'Document Metadata (JSON)',
+    metadataHelp: 'Example: { "source": "hr-policy", "category": "leave" }',
+    ingest: 'Ingest', ingestSuccess: 'Document ingested successfully',
+    ingestError: 'Failed to ingest document',
+    batchIngest: 'Batch Ingest', batchIngestDescription: 'Ingest multiple documents at once.',
+    documentsIngested: 'Documents ingested',
+    uploadFiles: 'Upload Files',
+    uploadFromFolder: 'Upload from Folder',
+    selectFiles: 'Select Files',
+    noFilesSelected: 'No files selected',
+    fileSelected: 'file selected',
+    filesSelected: 'files selected',
   },
   zh: {
     greeting: '嗨，你今天有什么计划？',
