@@ -649,19 +649,21 @@ function ChatInput({
             </button>
           )}
 
-          {/* Thinking toggle */}
-          <button
-            onClick={onThinkingToggle}
-            title={thinkingMode ? 'Thinking mode ON' : 'Thinking mode OFF'}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-              thinkingMode
-                ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400'
-                : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-          >
-            <Brain size={13} />
-            <span className="hidden sm:inline">Thinking</span>
-          </button>
+          {/* Thinking toggle - only for qwen3:8b */}
+          {selectedModel.name === 'qwen3:8b' && (
+            <button
+              onClick={onThinkingToggle}
+              title={thinkingMode ? 'Thinking mode ON' : 'Thinking mode OFF'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                thinkingMode
+                  ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400'
+                  : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              <Brain size={13} />
+              <span className="hidden sm:inline">Thinking</span>
+            </button>
+          )}
 
           {isStreaming ? (
             <button

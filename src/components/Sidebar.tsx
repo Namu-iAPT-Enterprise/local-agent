@@ -200,23 +200,25 @@ export default function Sidebar({
       </div>
 
       {/* Bottom: Settings + Logout */}
-      <div className="px-2 pb-5 flex flex-col gap-1 border-t border-gray-200 dark:border-gray-800 pt-2">
-        <button
-          onClick={onSettings}
-          className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm ${collapsed ? 'justify-center' : ''}`}
-          title={collapsed ? tr.settings : undefined}
-        >
-          <Settings size={17} />
-          {!collapsed && tr.settings}
-        </button>
-        <button
-          onClick={onLogout}
-          className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-500 transition-colors text-sm ${collapsed ? 'justify-center' : ''}`}
-          title={collapsed ? 'Logout' : undefined}
-        >
-          <LogOut size={17} />
-          {!collapsed && 'Logout'}
-        </button>
+      <div className="px-2 pb-5 flex border-t border-gray-200 dark:border-gray-800 pt-2">
+        <div className={`flex ${collapsed ? 'flex-col' : 'flex-row'} gap-1 w-full justify-center`}>
+          <button
+            onClick={onSettings}
+            className="flex items-center justify-center w-10 h-10 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors relative group"
+            title="Settings"
+          >
+            <Settings size={17} />
+            <span className="absolute left-full ml-2 px-2 py-1 bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800 text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity z-50">Settings</span>
+          </button>
+          <button
+            onClick={onLogout}
+            className="flex items-center justify-center w-10 h-10 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-500 transition-colors relative group"
+            title="Logout"
+          >
+            <LogOut size={17} />
+            <span className="absolute left-full ml-2 px-2 py-1 bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800 text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity z-50">Logout</span>
+          </button>
+        </div>
       </div>
     </aside>
   );
