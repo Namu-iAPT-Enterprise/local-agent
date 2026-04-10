@@ -14,7 +14,7 @@
  */
 const raw =
   (import.meta.env.VITE_API_BASE as string | undefined)?.trim() ||
-  'http://192.168.0.10:8080';
+  'http://192.168.0.6:8080';
 
 export const API_BASE = raw.replace(/\/$/, '');
 
