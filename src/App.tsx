@@ -14,7 +14,6 @@ import ThinkingBlock from './components/ThinkingBlock';
 import { getAccessToken, getAccountRole, saveAccountRole, logout as authLogout, getMe } from './api/auth';
 import type { ChatSessionInfo } from './api/chat';
 import { usePermissions } from './hooks/usePermissions';
-import FeatureCards from './components/FeatureCards';
 
 // ── Code detection for user messages ─────────────────────────────────────────
 
@@ -423,6 +422,10 @@ export default function App() {
           onSelectSession={handleSelectSession}
           activeSessionId={sessionId}
           refreshTrigger={sessionRefresh}
+          permissionsStatus={permissions.status}
+          allowedApis={permissions.allowedApis}
+          permissionRoles={permissions.permissionRoles}
+          accountRole={accountRole}
         />
       </div>
 
@@ -436,6 +439,10 @@ export default function App() {
               onSelectSession={handleSelectSession}
               activeSessionId={sessionId}
               refreshTrigger={sessionRefresh}
+              permissionsStatus={permissions.status}
+              allowedApis={permissions.allowedApis}
+              permissionRoles={permissions.permissionRoles}
+              accountRole={accountRole}
             />
           </div>
           <div className="flex-1 bg-black/40" onClick={() => setMobileMenuOpen(false)} />
@@ -556,16 +563,7 @@ export default function App() {
                 </h1>
                 <div className="w-full max-w-[720px]">
                   <ChatInput {...chatInputProps} />
-                  <div className="mt-6 md:mt-8 w-full space-y-6">
-                    {/* Feature cards — show/hide based on gateway permissions */}
-                    {(permissions.status !== 'idle') && (
-                      <FeatureCards
-                        status={permissions.status}
-                        allowedApis={permissions.allowedApis}
-                        permissionRoles={permissions.permissionRoles}
-                        accountRole={accountRole}
-                      />
-                    )}
+                  <div className="mt-6 md:mt-8 w-full">
                     <TemplateCards onSelect={(t) => setInput(t.description.replace('...', ''))} />
                   </div>
                 </div>
@@ -679,7 +677,7 @@ function ChatInput({
               disabled={!input.trim()}
               className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-300 hover:bg-blue-600 hover:text-white disabled:opacity-40 disabled:hover:bg-gray-200 dark:disabled:hover:bg-gray-700 disabled:hover:text-gray-500 transition-colors"
             >
-              <ArrowUp size={16} />
+              <ArrowUp size={14} />
             </button>
           )}
         </div>

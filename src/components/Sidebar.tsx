@@ -1,8 +1,69 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Settings, PanelLeftClose, PanelLeftOpen, Inbox, LogOut, Trash2, MessageSquare } from 'lucide-react';
+import {
+  Plus, Search, Settings, PanelLeftClose, PanelLeftOpen,
+  Inbox, LogOut, Trash2, MessageSquare,
+  ChevronDown, LayoutGrid,
+  Users, HardDrive, ScrollText,
+  MessageSquare as ChatIcon, Upload, FolderOpen,
+  BookPlus, FileEdit, Trash2 as TrashIcon,
+  Megaphone, Bell,
+} from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useLang } from '../context/LanguageContext';
 import { getSessions, deleteChatHistory, ChatSessionInfo } from '../api/chat';
+import type { AllowedApi } from '../api/gateway';
+import type { PermissionStatus } from '../hooks/usePermissions';
+
+// ── Feature definitions (mirrored from FeatureCards) ─────────────────────────
+
+interface FeatureDef {
+  featureKey: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  pathPrefix: string;
+  label: string;
+  description: string;
+  category: 'chat' | 'file' | 'knowledge' | 'notice' | 'admin';
+  icon: React.ElementType;
+  adminOnly?: boolean;
+}
+
+const FEATURES: FeatureDef[] = [
+  { featureKey: 'CHAT_MESSAGE',      method: 'POST',   pathPrefix: '/api/chat/message',  label: '채팅 전송',     description: '채팅 메시지 전송',        category: 'chat',      icon: ChatIcon  },
+  { featureKey: 'FILE_UPLOAD',       method: 'POST',   pathPrefix: '/api/files',          label: '파일 업로드',   description: '파일 업로드',              category: 'file',      icon: Upload    },
+  { featureKey: 'FILE_VIEW',         method: 'GET',    pathPrefix: '/api/files',          label: '파일 조회',     description: '파일 목록 및 다운로드',    category: 'file',      icon: FolderOpen },
+  { featureKey: 'KNOWLEDGE_REGISTER',method: 'POST',   pathPrefix: '/api/knowledge',      label: '지식 등록',     description: '지식 RAG 등록',           category: 'knowledge', icon: BookPlus  },
+  { featureKey: 'KNOWLEDGE_UPDATE',  method: 'PUT',    pathPrefix: '/api/knowledge',      label: '지식 수정',     description: '지식 항목 수정',           category: 'knowledge', icon: FileEdit  },
+  { featureKey: 'KNOWLEDGE_DELETE',  method: 'DELETE', pathPrefix: '/api/knowledge',      label: '지식 삭제',     description: '지식 항목 삭제',           category: 'knowledge', icon: TrashIcon },
+  { featureKey: 'NOTICE_SEND_ROLE',  method: 'POST',   pathPrefix: '/api/notice',         label: '역할 공지',     description: '특정 역할 대상 공지 발송', category: 'notice',    icon: Megaphone },
+  { featureKey: 'NOTICE_SEND_ALL',   method: 'POST',   pathPrefix: '/api/notice/all',     label: '전체 공지',     description: '전체 사용자 공지 발송',    category: 'notice',    icon: Bell      },
+  { featureKey: 'ADMIN_USERS',       method: 'GET',    pathPrefix: '/api/admin/users',    label: '계정 관리',     description: '사용자 계정 조회 및 관리', category: 'admin',     icon: Users,    adminOnly: true },
+  { featureKey: 'ADMIN_BACKUP',      method: 'GET',    pathPrefix: '/api/backups',        label: '백업 관리',     description: '시스템 백업 조회',         category: 'admin',     icon: HardDrive, adminOnly: true },
+  { featureKey: 'ADMIN_LOG',         method: 'GET',    pathPrefix: '/api/log',            label: '로그 조회',     description: '시스템 운영 로그',          category: 'admin',     icon: ScrollText, adminOnly: true },
+];
+
+const METHOD_COLORS: Record<string, string> = {
+  GET:    'text-sky-500 dark:text-sky-400',
+  POST:   'text-emerald-500 dark:text-emerald-400',
+  PUT:    'text-violet-500 dark:text-violet-400',
+  DELETE: 'text-red-500 dark:text-red-400',
+};
+
+const CATEGORY_COLOR: Record<FeatureDef['category'], string> = {
+  chat:      'text-blue-500',
+  file:      'text-blue-500',
+  knowledge: 'text-emerald-500',
+  notice:    'text-amber-500',
+  admin:     'text-rose-500',
+};
+
+function isFeatureAllowed(feature: FeatureDef, allowedApis: AllowedApi[]): boolean {
+  return allowedApis.some((api) => {
+    if (feature.featureKey && api.featureKey) return api.featureKey === feature.featureKey;
+    return api.method.toUpperCase() === feature.method && api.path.startsWith(feature.pathPrefix);
+  });
+}
+
+// ── Sidebar props ─────────────────────────────────────────────────────────────
 
 interface SidebarProps {
   onSettings?: () => void;
@@ -11,6 +72,11 @@ interface SidebarProps {
   onSelectSession?: (session: ChatSessionInfo) => void;
   activeSessionId?: string | null;
   refreshTrigger?: number;
+  // Permissions
+  permissionsStatus?: PermissionStatus;
+  allowedApis?: AllowedApi[];
+  permissionRoles?: string[];
+  accountRole?: string | null;
 }
 
 export default function Sidebar({
@@ -20,6 +86,10 @@ export default function Sidebar({
   onSelectSession,
   activeSessionId,
   refreshTrigger = 0,
+  permissionsStatus = 'idle',
+  allowedApis = [],
+  permissionRoles = [],
+  accountRole = null,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const { bgImage } = useTheme();
@@ -29,13 +99,14 @@ export default function Sidebar({
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [appsExpanded, setAppsExpanded] = useState(true);
 
   const loadSessions = useCallback(async () => {
     try {
       const data = await getSessions();
       setSessions(data);
     } catch {
-      // silently ignore — server may not have persisted any sessions yet
+      // silently ignore
     }
   }, []);
 
@@ -67,6 +138,17 @@ export default function Sidebar({
     if (diffDays < 7) return d.toLocaleDateString([], { weekday: 'short' });
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
+
+  // Compute visible apps
+  const isAdmin = accountRole === 'ADMIN';
+  const visibleFeatures = (permissionsStatus === 'loaded' || permissionsStatus === 'loading')
+    ? FEATURES.filter((f) => {
+        if (f.adminOnly) return isAdmin;
+        return isFeatureAllowed(f, allowedApis);
+      })
+    : [];
+
+  const showApps = visibleFeatures.length > 0;
 
   return (
     <aside className={`flex flex-col h-screen flex-shrink-0 transition-all duration-200 bg-gray-100 dark:bg-gray-900 ${collapsed ? 'w-16' : 'w-64'}`}>
@@ -145,6 +227,74 @@ export default function Sidebar({
             </button>
           )}
         </div>
+      )}
+
+      {/* ── Apps section ── */}
+      {showApps && (
+        <div className="mt-2 px-3">
+          {collapsed ? (
+            /* Collapsed: just an icon for each app, stacked */
+            <div className="flex flex-col items-center gap-1 py-1">
+              <div className="w-full h-px bg-gray-200 dark:bg-gray-700 mb-1" />
+              {visibleFeatures.map((f) => {
+                const Icon = f.icon;
+                return (
+                  <button
+                    key={f.featureKey}
+                    title={`${f.label} — ${f.description}`}
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${CATEGORY_COLOR[f.category]}`}
+                  >
+                    <Icon size={16} />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            /* Expanded: collapsible Apps panel */
+            <div>
+              <button
+                onClick={() => setAppsExpanded((v) => !v)}
+                className="flex items-center justify-between w-full px-1 py-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider hover:text-gray-600 dark:hover:text-gray-300 transition-colors group"
+              >
+                <div className="flex items-center gap-1.5">
+                  <LayoutGrid size={12} />
+                  <span>Apps</span>
+                </div>
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform duration-200 ${appsExpanded ? '' : '-rotate-90'}`}
+                />
+              </button>
+
+              {appsExpanded && (
+                <div className="mt-0.5 space-y-0.5 pb-1">
+                  {visibleFeatures.map((f) => {
+                    const Icon = f.icon;
+                    const methodColor = METHOD_COLORS[f.method] ?? 'text-gray-400';
+                    return (
+                      <div
+                        key={f.featureKey}
+                        title={f.description}
+                        className="flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-gray-700/60 cursor-default transition-colors"
+                      >
+                        <Icon size={14} className={`flex-shrink-0 ${CATEGORY_COLOR[f.category]}`} />
+                        <span className="flex-1 text-xs font-medium truncate">{f.label}</span>
+                        <span className={`text-[9px] font-bold font-mono flex-shrink-0 ${methodColor}`}>
+                          {f.method}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Divider before session list */}
+      {!collapsed && showApps && (
+        <div className="mx-3 mt-2 mb-0.5 border-t border-gray-200 dark:border-gray-700" />
       )}
 
       {/* Session list */}
