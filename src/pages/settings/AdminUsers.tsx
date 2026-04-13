@@ -4,6 +4,8 @@ import {
   fetchUserPermissionRoles,
   createUserPermissionRoles,
   updateUserPermissionRoles,
+  reloadUserPermissionCache,
+  reloadAllPermissionCache,
   NotFoundError,
   type PermissionRole,
 } from '../../api/gateway';
@@ -106,7 +108,16 @@ export default function AdminUsers() {
       if (isNew) {
         await createUserPermissionRoles(uid, roles);
       } else {
-        await updateUserPermissionRoles(uid, roles);
+        try {
+          await updateUserPermissionRoles(uid, roles);
+        } catch (e) {
+          if (e instanceof NotFoundError) {
+            // 미등록 사용자로 판정되면(404) 생성을 시도합니다.
+            await createUserPermissionRoles(uid, roles);
+          } else {
+            throw e;
+          }
+        }
       }
       setCurrentRoles(roles);
       setLookupStatus('found');
@@ -257,6 +268,47 @@ export default function AdminUsers() {
           </div>
         </div>
       )}
+
+      {/* 캐시 관리 블럭 */}
+      <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">캐시 관리</h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            권한 변경사항이 즉시 반영되지 않을 경우 캐시를 새로고침하세요.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              const uid = searchId.trim();
+              if (!uid) return alert('사용자 ID를 입력하세요.');
+              try {
+                await reloadUserPermissionCache(uid);
+                alert(`${uid} 사용자의 캐시가 새로고침 되었습니다.`);
+              } catch (e: any) {
+                alert(`캐시 새로고침 실패: ${e.message}`);
+              }
+            }}
+            className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            특정 사용자 캐시 새로고침
+          </button>
+          <button
+            onClick={async () => {
+              if (!confirm('모든 사용자의 권한 캐시를 새로고침 하시겠습니까?')) return;
+              try {
+                await reloadAllPermissionCache();
+                alert('전체 사용자의 캐시가 새로고침 되었습니다.');
+              } catch (e: any) {
+                alert(`전체 캐시 새로고침 실패: ${e.message}`);
+              }
+            }}
+            className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-900/40 transition-colors"
+          >
+            모든 사용자 캐시 새로고침
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

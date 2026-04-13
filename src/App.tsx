@@ -12,7 +12,8 @@ import { useChat, ModelOption, LOCAL_MODELS } from './hooks/useChat';
 import type { AssistantVariant } from './hooks/useChat';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ThinkingBlock from './components/ThinkingBlock';
-import { getAccessToken, getAccountRole, saveAccountRole, logout as authLogout, getMe } from './api/auth';
+import { getAccessToken, getAccountRole, saveAccountRole, logout as authLogout, getMe, getUserId } from './api/auth';
+import { createUserPermissionRoles } from './api/gateway';
 import type { ChatSessionInfo } from './api/chat';
 import { usePermissions } from './hooks/usePermissions';
 
@@ -452,6 +453,14 @@ export default function App() {
           permissionRoles={permissions.permissionRoles}
           accountRole={accountRole}
           onFeatureClick={(key) => { if (key === 'ADMIN_USERS') setPage('admin-users'); }}
+          userId={getUserId()}
+          onRefreshPermissions={() => permissions.reload()}
+          onCreateDefaultRoles={async () => {
+            const uid = getUserId();
+            if (!uid) return;
+            try { await createUserPermissionRoles(uid, ['WANDERER']); } catch { /* already exists */ }
+            permissions.reload();
+          }}
         />
       </div>
 
@@ -470,6 +479,14 @@ export default function App() {
               permissionRoles={permissions.permissionRoles}
               accountRole={accountRole}
               onFeatureClick={(key) => { if (key === 'ADMIN_USERS') { setPage('admin-users'); setMobileMenuOpen(false); } }}
+              userId={getUserId()}
+              onRefreshPermissions={() => permissions.reload()}
+              onCreateDefaultRoles={async () => {
+                const uid = getUserId();
+                if (!uid) return;
+                try { await createUserPermissionRoles(uid, ['WANDERER']); } catch { /* already exists */ }
+                permissions.reload();
+              }}
             />
           </div>
           <div className="flex-1 bg-black/40" onClick={() => setMobileMenuOpen(false)} />

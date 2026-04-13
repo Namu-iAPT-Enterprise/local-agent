@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { fetchRolePermissions } from '../api/gateway';
 import type { AllowedApi } from '../api/gateway';
 
@@ -10,22 +10,28 @@ export interface PermissionState {
   status: PermissionStatus;
   permissionRoles: string[];
   allowedApis: AllowedApi[];
+  reload: () => void;
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
 /**
- * 로그인 후 GET /api/management/role/profile 를 한 번 호출해 권한 정보를 가져옵니다.
+ * 로그인 후 GET /api/management/role/profile 를 호출해 권한 정보를 가져옵니다.
  *
- * Data Gateway가 자체 캐시에서 즉시 응답하므로 202 폴링 없이 단순 fetch입니다.
+ * reload()를 호출하면 즉시 재조회합니다.
  * isLoggedIn이 false가 되면(로그아웃) 상태를 idle로 초기화합니다.
  */
 export function usePermissions(isLoggedIn: boolean): PermissionState {
-  const [state, setState] = useState<PermissionState>({
+  const [reloadCount, setReloadCount] = useState(0);
+  const [state, setState] = useState<Omit<PermissionState, 'reload'>>({
     status: 'idle',
     permissionRoles: [],
     allowedApis: [],
   });
+
+  const reload = useCallback(() => {
+    setReloadCount((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -34,7 +40,7 @@ export function usePermissions(isLoggedIn: boolean): PermissionState {
     }
 
     let cancelled = false;
-    setState({ status: 'loading', permissionRoles: [], allowedApis: [] });
+    setState((prev) => ({ ...prev, status: 'loading' }));
 
     fetchRolePermissions()
       .then((data) => {
@@ -51,7 +57,7 @@ export function usePermissions(isLoggedIn: boolean): PermissionState {
       });
 
     return () => { cancelled = true; };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, reloadCount]);
 
-  return state;
+  return { ...state, reload };
 }

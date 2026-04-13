@@ -83,11 +83,70 @@ export async function updateUserPermissionRoles(userId: string, permissionRoles:
     body: JSON.stringify({ userId, permissionRoles }),
   });
   if (res.status === 403) throw new Error('접근 권한이 없습니다 (SOVEREIGN 이상 필요).');
-  if (res.status === 404) throw new Error('사용자를 찾을 수 없습니다. 먼저 등록하세요.');
+  if (res.status === 404) throw new NotFoundError('사용자를 찾을 수 없습니다. 먼저 등록하세요.');
   if (!res.ok) throw new Error(`역할 수정 실패 (${res.status})`);
+}
+
+/**
+ * POST /api/management/role/reload
+ * 특정 사용자의 권한 캐시를 새로고침합니다.
+ */
+export async function reloadUserPermissionCache(userId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/reload?userId=${encodeURIComponent(userId)}`, {
+    method: 'POST'
+  });
+  if (!res.ok) throw new Error(`캐시 새로고침 실패 (${res.status})`);
+}
+
+/**
+ * POST /api/management/role/reload/all
+ * 모든 사용자의 권한 캐시를 새로고침합니다.
+ */
+export async function reloadAllPermissionCache(): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/reload/all`, {
+    method: 'POST'
+  });
+  if (!res.ok) throw new Error(`전체 캐시 새로고침 실패 (${res.status})`);
 }
 
 /** 역할 레코드 없음(404)을 구분하기 위한 에러 타입 */
 export class NotFoundError extends Error {
   constructor(message: string) { super(message); this.name = 'NotFoundError'; }
+}
+
+// ── Management Request API ─────────────────────────────────────────────────────
+
+export interface ManagementRequestPayload {
+  source: string;
+  type: string;
+  title?: string;
+  message: string;
+  metadata?: string;
+}
+
+export interface ManagementRequestResponse {
+  id: string;
+  source: string;
+  type: string;
+  title?: string;
+  message: string;
+  metadata?: string;
+  status: 'PENDING' | 'RESOLVED';
+  createdAt: string;
+}
+
+/**
+ * POST /api/management/request/post
+ * 관리자에게 요청/알림을 전송합니다. 인증 없이 호출 가능합니다.
+ */
+export async function postManagementRequest(
+  payload: ManagementRequestPayload
+): Promise<ManagementRequestResponse> {
+  const res = await fetch(`${API_BASE}/api/management/request/post`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`요청 전송 실패 (${res.status})`);
+  return res.json();
 }
