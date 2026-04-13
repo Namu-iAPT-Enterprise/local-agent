@@ -77,6 +77,8 @@ interface SidebarProps {
   allowedApis?: AllowedApi[];
   permissionRoles?: string[];
   accountRole?: string | null;
+  // Feature click (e.g. ADMIN_USERS → 화면 전환)
+  onFeatureClick?: (featureKey: string) => void;
 }
 
 export default function Sidebar({
@@ -90,6 +92,7 @@ export default function Sidebar({
   allowedApis = [],
   permissionRoles = [],
   accountRole = null,
+  onFeatureClick,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const { bgImage } = useTheme();
@@ -140,10 +143,15 @@ export default function Sidebar({
   }
 
   // Compute visible apps
+  // adminOnly features are visible when:
+  //   (a) the account role is ADMIN — hard account-level authority, or
+  //   (b) the permission role includes SOVEREIGN — highest permission role
   const isAdmin = accountRole === 'ADMIN';
+  const isSovereign = permissionRoles.includes('SOVEREIGN');
+  const hasAdminAccess = isAdmin || isSovereign;
   const visibleFeatures = (permissionsStatus === 'loaded' || permissionsStatus === 'loading')
     ? FEATURES.filter((f) => {
-        if (f.adminOnly) return isAdmin;
+        if (f.adminOnly) return hasAdminAccess;
         return isFeatureAllowed(f, allowedApis);
       })
     : [];
@@ -238,11 +246,13 @@ export default function Sidebar({
               <div className="w-full h-px bg-gray-200 dark:bg-gray-700 mb-1" />
               {visibleFeatures.map((f) => {
                 const Icon = f.icon;
+                const clickable = !!onFeatureClick;
                 return (
                   <button
                     key={f.featureKey}
                     title={`${f.label} — ${f.description}`}
-                    className={`w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${CATEGORY_COLOR[f.category]}`}
+                    onClick={() => onFeatureClick?.(f.featureKey)}
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors ${CATEGORY_COLOR[f.category]} ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
                   >
                     <Icon size={16} />
                   </button>
@@ -271,18 +281,20 @@ export default function Sidebar({
                   {visibleFeatures.map((f) => {
                     const Icon = f.icon;
                     const methodColor = METHOD_COLORS[f.method] ?? 'text-gray-400';
+                    const clickable = !!onFeatureClick;
                     return (
-                      <div
+                      <button
                         key={f.featureKey}
                         title={f.description}
-                        className="flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-gray-700/60 cursor-default transition-colors"
+                        onClick={() => onFeatureClick?.(f.featureKey)}
+                        className={`flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-gray-700/60 transition-colors text-left ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
                       >
                         <Icon size={14} className={`flex-shrink-0 ${CATEGORY_COLOR[f.category]}`} />
                         <span className="flex-1 text-xs font-medium truncate">{f.label}</span>
                         <span className={`text-[9px] font-bold font-mono flex-shrink-0 ${methodColor}`}>
                           {f.method}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

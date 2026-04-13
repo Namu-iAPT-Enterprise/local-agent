@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import AdminUsersScreen from './components/AdminUsersScreen';
 import { useTheme } from './context/ThemeContext';
 import { useLang } from './context/LanguageContext';
 import { useChat, ModelOption, LOCAL_MODELS } from './hooks/useChat';
@@ -305,7 +306,7 @@ function AssistantMessageActions({
 
 export default function App() {
   const [input, setInput] = useState('');
-  const [page, setPage] = useState<'login' | 'signup' | 'home' | 'settings'>(
+  const [page, setPage] = useState<'login' | 'signup' | 'home' | 'settings' | 'admin-users'>(
     getAccessToken() ? 'home' : 'login'
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -318,8 +319,9 @@ export default function App() {
   const { tr } = useLang();
   const { messages, isStreaming, send, regenerate, setVariant, prepareEdit, clear, stop, loadSession, sessionId } = useChat();
 
-  const isLoggedIn = page === 'home' || page === 'settings';
+  const isLoggedIn = page === 'home' || page === 'settings' || page === 'admin-users';
   const permissions = usePermissions(isLoggedIn);
+  const hasAdminAccess = accountRole === 'ADMIN' || permissions.permissionRoles.includes('SOVEREIGN');
 
   // Redirect to login when token refresh fails across the app
   useEffect(() => {
@@ -327,6 +329,20 @@ export default function App() {
     window.addEventListener('auth:expired', handler);
     return () => window.removeEventListener('auth:expired', handler);
   }, [clear]);
+
+  // 로그인 상태가 될 때마다 서버에서 계정 역할을 새로 가져옵니다.
+  // 페이지 새로고침·로그인 직후 모두 최신 역할을 반영합니다.
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    getMe()
+      .then((me) => {
+        saveAccountRole(me.role);
+        setAccountRole(me.role);
+      })
+      .catch(() => {
+        // 네트워크 오류 등 실패 시 localStorage 캐시 유지
+      });
+  }, [isLoggedIn]);
 
   // Refresh session list + auto-focus input after streaming ends
   const prevStreaming = useRef(false);
@@ -339,17 +355,10 @@ export default function App() {
     prevStreaming.current = isStreaming;
   }, [isStreaming]);
 
-  const handleLogin = async (_uid: string) => {
+  const handleLogin = (_uid: string) => {
     setPage('home');
     setSessionRefresh((n) => n + 1);
-    // Fetch account role (USER / ADMIN) and cache it
-    try {
-      const me = await getMe();
-      saveAccountRole(me.role);
-      setAccountRole(me.role);
-    } catch {
-      // Non-critical — gateway permissions will still load
-    }
+    // 역할 갱신은 isLoggedIn useEffect 가 처리합니다.
   };
 
   const handleLogout = async () => {
@@ -391,7 +400,23 @@ export default function App() {
 
   if (page === 'login')    return <Login onLogin={handleLogin} onSignup={() => setPage('signup')} />;
   if (page === 'signup')   return <Signup onSignup={handleLogin} onLogin={() => setPage('login')} />;
-  if (page === 'settings') return <Settings onBack={() => setPage('home')} />;
+  if (page === 'settings') return (
+    <Settings
+      onBack={() => setPage('home')}
+      accountRole={accountRole}
+      permissionRoles={permissions.permissionRoles}
+    />
+  );
+  // 계정 관리 화면 — 권한 없는 클라이언트에는 컴포넌트 번들 자체가 전달되지 않습니다.
+  // AdminUsersScreen 내부의 React.lazy 로드는 hasAdminAccess 가 true 인 경우에만 실행됩니다.
+  if (page === 'admin-users') {
+    if (!hasAdminAccess) {
+      // 권한 없이 URL/상태를 직접 조작한 경우 즉시 홈으로 리다이렉트
+      setPage('home');
+      return null;
+    }
+    return <AdminUsersScreen onBack={() => setPage('home')} />;
+  }
 
   const hasMessages = messages.length > 0;
 
@@ -426,6 +451,7 @@ export default function App() {
           allowedApis={permissions.allowedApis}
           permissionRoles={permissions.permissionRoles}
           accountRole={accountRole}
+          onFeatureClick={(key) => { if (key === 'ADMIN_USERS') setPage('admin-users'); }}
         />
       </div>
 
@@ -443,6 +469,7 @@ export default function App() {
               allowedApis={permissions.allowedApis}
               permissionRoles={permissions.permissionRoles}
               accountRole={accountRole}
+              onFeatureClick={(key) => { if (key === 'ADMIN_USERS') { setPage('admin-users'); setMobileMenuOpen(false); } }}
             />
           </div>
           <div className="flex-1 bg-black/40" onClick={() => setMobileMenuOpen(false)} />

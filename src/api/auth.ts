@@ -134,9 +134,7 @@ export async function fetchWithAuth(input: RequestInfo, init: RequestInit = {}):
 }
 
 export async function getMe(): Promise<MeResponse> {
-  const res = await fetch(`${BASE}/api/auth/me`, {
-    headers: { ...authHeaders() },
-  });
+  const res = await fetchWithAuth(`${BASE}/api/auth/me`);
   if (!res.ok) throw new Error(`Unauthorized (${res.status})`);
   return res.json();
 }

@@ -15,6 +15,7 @@ import {
   PanelLeftOpen,
   Settings as SettingsIcon,
   Database,
+  ShieldCheck,
 } from 'lucide-react';
 import Model from './settings/Model';
 import Assistants from './settings/Assistants';
@@ -24,27 +25,49 @@ import Remote from './settings/Remote';
 import System from './settings/System';
 import About from './settings/About';
 import Knowledge from './settings/Knowledge';
+import AdminUsers from './settings/AdminUsers';
 
-const TAB_IDS = ['model','assistants','skills-hub','display','remote','system','knowledge','about'] as const;
-const TAB_ICONS = { model: Cpu, assistants: Users, 'skills-hub': Zap, display: Monitor, remote: Globe, system: LayoutGrid, knowledge: Database, about: Info };
-const TAB_COMPONENTS = { model: Model, assistants: Assistants, 'skills-hub': SkillsHub, display: Display, remote: Remote, system: System, knowledge: Knowledge, about: About };
+const BASE_TAB_IDS = ['model','assistants','skills-hub','display','remote','system','knowledge','about'] as const;
+type BaseTabId = typeof BASE_TAB_IDS[number];
+type TabId = BaseTabId | 'admin-users';
+
+const TAB_ICONS: Record<TabId, React.ElementType> = {
+  model: Cpu, assistants: Users, 'skills-hub': Zap, display: Monitor,
+  remote: Globe, system: LayoutGrid, knowledge: Database, about: Info,
+  'admin-users': ShieldCheck,
+};
+const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
+  model: Model, assistants: Assistants, 'skills-hub': SkillsHub, display: Display,
+  remote: Remote, system: System, knowledge: Knowledge, about: About,
+  'admin-users': AdminUsers,
+};
 
 interface SettingsProps {
   onBack: () => void;
+  /** 계정 역할 (ADMIN 이면 관리자 탭 표시) */
+  accountRole?: string | null;
+  /** 권한 역할 목록 (SOVEREIGN 이면 관리자 탭 표시) */
+  permissionRoles?: string[];
 }
 
-export default function Settings({ onBack }: SettingsProps) {
-  const [activeTab, setActiveTab] = useState('model');
+export default function Settings({ onBack, accountRole = null, permissionRoles = [] }: SettingsProps) {
+  const [activeTab, setActiveTab] = useState<TabId>('model');
   const [collapsed, setCollapsed] = useState(false);
   const { bgImage } = useTheme();
   const { tr } = useLang();
 
-  const tabLabels: Record<string, string> = {
+  // Show admin tab when account is ADMIN or permission role is SOVEREIGN
+  const hasAdminAccess = accountRole === 'ADMIN' || permissionRoles.includes('SOVEREIGN');
+
+  const tabLabels: Record<TabId, string> = {
     model: tr.model, assistants: tr.assistants, 'skills-hub': tr.skillsHub,
     display: tr.display, remote: tr.remote, system: tr.system, knowledge: tr.knowledge, about: tr.about,
+    'admin-users': '계정 관리',
   };
-  const tabs = TAB_IDS.map((id) => ({ id, label: tabLabels[id], icon: TAB_ICONS[id], component: TAB_COMPONENTS[id] }));
-  const ActiveComponent = TAB_COMPONENTS[activeTab as keyof typeof TAB_COMPONENTS] ?? Model;
+
+  const visibleTabIds: TabId[] = [...BASE_TAB_IDS, ...(hasAdminAccess ? ['admin-users' as const] : [])];
+  const tabs = visibleTabIds.map((id) => ({ id, label: tabLabels[id], icon: TAB_ICONS[id] }));
+  const ActiveComponent = TAB_COMPONENTS[activeTab] ?? Model;
 
   return (
     <div className="flex h-screen font-sans overflow-hidden">
