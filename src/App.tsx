@@ -727,7 +727,7 @@ function ChatInput({
           )}
 
           {/* Thinking toggle - only for qwen3:8b */}
-          {selectedModel.name === 'qwen3:8b' && (
+          {selectedModel.name === 'qwen3‑vl:4b' && (
             <button
               onClick={onThinkingToggle}
               title={thinkingMode ? 'Thinking mode ON' : 'Thinking mode OFF'}
