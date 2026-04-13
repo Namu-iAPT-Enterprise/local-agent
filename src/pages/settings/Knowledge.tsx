@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useLang } from '../../context/LanguageContext';
 import { Database, Upload, FileText, Plus, Trash2, CheckCircle, AlertCircle, Loader, FolderOpen } from 'lucide-react';
 import { RAG_INGEST_URL, RAG_INGEST_BATCH_URL } from '../../config/apiBase';
@@ -31,7 +31,9 @@ export default function Knowledge() {
 
   // Single document state
   const [singleDoc, setSingleDoc] = useState<Document>({ text: '', metadata: {} });
-  const [singleMetadataStr, setSingleMetadataStr] = useState('');
+  const [metadataKey, setMetadataKey] = useState('');
+  const [customMetadataKey, setCustomMetadataKey] = useState('');
+  const [metadataValue, setMetadataValue] = useState('');
   const [singleResult, setSingleResult] = useState<IngestResult>({ status: 'idle' });
   const [singleLoading, setSingleLoading] = useState(false);
 
@@ -47,6 +49,42 @@ export default function Knowledge() {
   const [fileMetadataStr, setFileMetadataStr] = useState('');
   const [fileResult, setFileResult] = useState<IngestResult>({ status: 'idle' });
   const [fileLoading, setFileLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newFiles: string[] = [];
+    const newMap = new Map<string, string>();
+    for (const file of Array.from(files)) {
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file);
+      });
+      newFiles.push(file.name);
+      newMap.set(file.name, content);
+    }
+    setSelectedFiles(prev => [...prev, ...newFiles]);
+    setFileContents(prev => new Map([...prev, ...newMap]));
+  };
+
+  const handleSelectFiles = async () => {
+    if (window.electronAPI?.openFileDialog) {
+      try {
+        const result = await window.electronAPI.openFileDialog();
+        if (!result.canceled && result.filePaths.length > 0) {
+          setSelectedFiles(result.filePaths);
+          setFileResult({ status: 'idle' });
+        }
+      } catch (err) {
+        setFileResult({ status: 'error', message: `Failed to open file dialog: ${err instanceof Error ? err.message : 'Unknown error'}` });
+      }
+    } else if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
 
   const parseMetadata = (str: string): Record<string, unknown> => {
     if (!str.trim()) return {};
@@ -64,7 +102,7 @@ export default function Knowledge() {
     setSingleResult({ status: 'idle' });
 
     try {
-      const metadata = singleMetadataStr ? parseMetadata(singleMetadataStr) : {};
+      const metadata = metadataValue ? {[metadataKey === 'other' ? customMetadataKey : metadataKey]: metadataValue} : {};
       const response = await fetch(RAG_INGEST_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,17 +162,7 @@ export default function Knowledge() {
     }
   };
 
-  const handleSelectFiles = async () => {
-    try {
-      const result = await window.electronAPI.openFileDialog();
-      if (!result.canceled && result.filePaths.length > 0) {
-        setSelectedFiles(result.filePaths);
-        setFileResult({ status: 'idle' });
-      }
-    } catch (err) {
-      setFileResult({ status: 'error', message: `Failed to open file dialog: ${err instanceof Error ? err.message : 'Unknown error'}` });
-    }
-  };
+
 
   const handleIngestFiles = async () => {
     if (selectedFiles.length === 0) return;
@@ -144,7 +172,7 @@ export default function Knowledge() {
 
     try {
       const docsToIngest: { text: string; metadata: Record<string, unknown> }[] = [];
-      const baseMetadata = fileMetadataStr ? parseMetadata(fileMetadataStr) : {};
+      const baseMetadata = metadataValue ? {[metadataKey === 'other' ? customMetadataKey : metadataKey]: metadataValue} : {};
 
       for (const filePath of selectedFiles) {
         const result = await window.electronAPI.readFile(filePath);
@@ -256,18 +284,40 @@ export default function Knowledge() {
             </div>
 
             {/* Metadata */}
-            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-              <label className="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-2">
-                {tr.documentMetadata}
-              </label>
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+        <label className="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-2">
+          {tr.documentMetadata} <span className="text-gray-400 font-normal">(optional, applied to all files)</span>
+        </label>
+          <div className="flex gap-2">
+            <select
+              value={metadataKey}
+              onChange={(e) => setMetadataKey(e.target.value)}
+              className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm"
+            >
+              <option value="">Select key</option>
+              <option value="source">source</option>
+              <option value="author">author</option>
+              <option value="category">category</option>
+              <option value="other">Other</option>
+            </select>
+            {metadataKey === 'other' && (
               <input
                 type="text"
-                value={singleMetadataStr}
-                onChange={(e) => setSingleMetadataStr(e.target.value)}
-                placeholder={tr.metadataHelp}
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                placeholder="Custom key"
+                value={customMetadataKey}
+                onChange={(e) => setCustomMetadataKey(e.target.value)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm"
               />
-            </div>
+            )}
+            <input
+              type="text"
+              placeholder="Value"
+              value={metadataValue}
+              onChange={(e) => setMetadataValue(e.target.value)}
+              className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm"
+            />
+          </div>
+        </div>
 
             {/* Result message */}
             {singleResult.status !== 'idle' && (
@@ -432,18 +482,20 @@ export default function Knowledge() {
                 Select Files
               </label>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={handleSelectFiles}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <FolderOpen size={16} />
-                  {tr.selectFiles}
-                </button>
-                {selectedFiles.length > 0 && (
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {selectedFiles.length} {selectedFiles.length === 1 ? tr.fileSelected : tr.filesSelected}
-                  </span>
-                )}
+          <button
+            onClick={handleSelectFiles}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            <FolderOpen size={16} />
+            {tr.selectFiles}
+          </button>
+          <input
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            ref={fileInputRef}
+            onChange={handleFileInputChange}
+          />
               </div>
               {selectedFiles.length > 0 && (
                 <div className="mt-3 max-h-40 overflow-y-auto space-y-1">
@@ -461,13 +513,35 @@ export default function Knowledge() {
               <label className="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-2">
                 {tr.documentMetadata} <span className="text-gray-400 font-normal">(optional, applied to all files)</span>
               </label>
-              <input
-                type="text"
-                value={fileMetadataStr}
-                onChange={(e) => setFileMetadataStr(e.target.value)}
-                placeholder={tr.metadataHelp}
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-              />
+              <div className="flex gap-2">
+                <select
+                  value={metadataKey}
+                  onChange={(e) => setMetadataKey(e.target.value)}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm"
+                >
+                  <option value="">Select key</option>
+                  <option value="source">source</option>
+                  <option value="author">author</option>
+                  <option value="category">category</option>
+                  <option value="other">Other</option>
+                </select>
+                {metadataKey === 'other' && (
+                  <input
+                    type="text"
+                    placeholder="Custom key"
+                    value={customMetadataKey}
+                    onChange={(e) => setCustomMetadataKey(e.target.value)}
+                    className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm"
+                  />
+                )}
+                <input
+                  type="text"
+                  placeholder="Value"
+                  value={metadataValue}
+                  onChange={(e) => setMetadataValue(e.target.value)}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm"
+                />
+              </div>
             </div>
 
             {/* Result message */}
