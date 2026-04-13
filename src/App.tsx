@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowUp, Plus, Menu, Brain, ChevronDown, Check, Copy, RefreshCw, ChevronLeft, ChevronRight, Pencil, Database, ShieldAlert } from 'lucide-react';
-import TemplateCards from './components/TemplateCards';
+import AssistantCards from './components/AssistantCards';
+import CreateAssistantModal from './components/CreateAssistantModal';
 import Sidebar from './components/Sidebar';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
@@ -16,6 +17,7 @@ import { getAccessToken, getAccountRole, saveAccountRole, logout as authLogout, 
 import { createUserPermissionRoles } from './api/gateway';
 import type { ChatSessionInfo } from './api/chat';
 import { usePermissions } from './hooks/usePermissions';
+import { defaultAssistants, getCustomAssistants, saveCustomAssistant, type OfficeAssistant } from './data/officeAssistants';
 
 // ── Code detection for user messages ─────────────────────────────────────────
 
@@ -320,7 +322,14 @@ export default function App() {
   const { tr } = useLang();
   const { messages, isStreaming, send, regenerate, setVariant, prepareEdit, clear, stop, loadSession, sessionId } = useChat();
 
-  const isLoggedIn = page === 'home' || page === 'settings' || page === 'admin-users';
+  // Office assistants state
+  const [customAssistants, setCustomAssistants] = useState<OfficeAssistant[]>(() => getCustomAssistants());
+  const [activeAssistant, setActiveAssistant] = useState<OfficeAssistant | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const allAssistants = [...defaultAssistants, ...customAssistants];
+
+  const isLoggedIn = page === 'home' || page === 'settings';
   const permissions = usePermissions(isLoggedIn);
   const hasAdminAccess = accountRole === 'ADMIN' || permissions.permissionRoles.includes('SOVEREIGN');
 
@@ -388,7 +397,13 @@ export default function App() {
     const text = input.trim();
     if (!text || isStreaming) return;
     setInput('');
-    send(text, thinkingMode, selectedModel, ragMode);
+    
+    // If an assistant is active, prepend the system prompt
+    const messageToSend = activeAssistant 
+      ? `${activeAssistant.systemPrompt}\n\n${text}` 
+      : text;
+    
+    send(messageToSend, thinkingMode, selectedModel, ragMode);
     textareaRef.current?.focus();
   };
 
@@ -607,8 +622,17 @@ export default function App() {
                 </h1>
                 <div className="w-full max-w-[720px]">
                   <ChatInput {...chatInputProps} />
-                  <div className="mt-6 md:mt-8 w-full">
-                    <TemplateCards onSelect={(t) => setInput(t.description.replace('...', ''))} />
+                  <div className="mt-6 w-full">
+                    <AssistantCards
+                      assistants={allAssistants}
+                      activeAssistantId={activeAssistant?.id ?? null}
+                      onSelectAssistant={(assistant) => {
+                        setActiveAssistant(assistant);
+                        setInput(assistant.promptPrefix);
+                        setTimeout(() => textareaRef.current?.focus(), 0);
+                      }}
+                      onCreateAssistant={() => setShowCreateModal(true)}
+                    />
                   </div>
                 </div>
               </div>
@@ -623,6 +647,17 @@ export default function App() {
           <ShieldAlert size={13} className="flex-shrink-0" />
           <span>역할 권한 서비스에 연결할 수 없습니다.</span>
         </div>
+      )}
+
+      {/* Create Assistant Modal */}
+      {showCreateModal && (
+        <CreateAssistantModal
+          onClose={() => setShowCreateModal(false)}
+          onCreate={(assistant) => {
+            saveCustomAssistant(assistant);
+            setCustomAssistants((prev) => [...prev, assistant]);
+          }}
+        />
       )}
     </div>
   );
