@@ -12,7 +12,15 @@ export interface ChatMessageListProps {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   prepareEdit: (index: number) => string;
   setInput: (v: string) => void;
-  regenerate: (index: number, thinkingMode: boolean, model: ModelOption, ragMode: boolean) => void;
+  regenerate: (
+    index: number,
+    thinkingMode: boolean,
+    model: ModelOption,
+    ragMode: boolean,
+    systemPrompt?: string,
+  ) => void;
+  /** When set, merged into the API request on regenerate only; user bubbles stay plain text. */
+  assistantSystemPrompt?: string | null;
   setVariant: (messageIndex: number, variantIndex: number) => void;
   thinkingMode: boolean;
   selectedModel: ModelOption;
@@ -31,6 +39,7 @@ export function ChatMessageList({
   thinkingMode,
   selectedModel,
   ragMode,
+  assistantSystemPrompt,
 }: ChatMessageListProps) {
   return (
     <>
@@ -104,7 +113,9 @@ export function ChatMessageList({
                   isStreaming={isStreaming}
                   variants={msg.variants}
                   activeVariantIdx={msg.activeVariantIdx}
-                  onRegenerate={() => regenerate(i, thinkingMode, selectedModel, ragMode)}
+                  onRegenerate={() =>
+                    regenerate(i, thinkingMode, selectedModel, ragMode, assistantSystemPrompt ?? undefined)
+                  }
                   onVariantChange={(idx) => setVariant(i, idx)}
                 />
               )}

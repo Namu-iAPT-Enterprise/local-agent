@@ -109,6 +109,89 @@ const FENCE_LANG_ALIASES = [
   'py', 'rb', 'rs', 'kt', 'sh', 'zsh', 'shell', 'c', 'text', 'txt', 'http',
 ].sort((a, b) => b.length - a.length);
 
+/**
+ * GFM fenced blocks only parse when the opening ``` starts a line. Models often emit
+ * "...browser.```html" — without a line break the fence is treated as paragraph junk.
+ * Line-based so we never break "…\\n   ```html" (indented fence) and we still fix when
+ * "```html" is followed by "\\n<!DOCTYPE" (lookahead \\S alone would miss that).
+ */
+function ensureNewlineBeforeFenceOpener(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      const m = /```[a-zA-Z0-9#+]+/.exec(line);
+      if (!m || m.index === 0) return line;
+      const before = line.slice(0, m.index);
+      if (!/\S/.test(before)) return line;
+      const after = line.slice(m.index);
+      return `${before.trimEnd()}\n\n${after}`;
+    })
+    .join('\n');
+}
+
+/** ATX headings (### Title) must start a line; fix "...text.### Heading" */
+function ensureNewlineBeforeAtxHeading(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      const hm = /#{1,6}\s+\S/.exec(line);
+      if (!hm || hm.index === 0) return line;
+      const before = line.slice(0, hm.index);
+      if (!/\S/.test(before)) return line;
+      return `${before.trimEnd()}\n\n${line.slice(hm.index)}`;
+    })
+    .join('\n');
+}
+
+/** "How to use this:1.  First step" — numbered list glued to label after colon */
+function ensureNewlineBeforeNumberedListAfterColon(text: string): string {
+  return text.replace(/(\w+):(\d+\.\s+)/g, '$1:\n\n$2');
+}
+
+/** Run first: structural newlines models omit (stable base for fence + heading fixes). */
+function fixModelBlockSeparators(text: string): string {
+  let s = ensureNewlineBeforeFenceOpener(text);
+  s = ensureNewlineBeforeAtxHeading(s);
+  s = ensureNewlineBeforeNumberedListAfterColon(s);
+  return s;
+}
+
+/**
+ * Streamed tokens often split a fence language id mid-word (e.g. ```htm + l → ```htm l).
+ * Collapse internal spaces when the result is a known language id.
+ */
+function fixFenceLanguageSpacesOnLine(text: string): string {
+  return text.replace(
+    /^(\s*```)([a-zA-Z0-9#+]+(?:\s+[a-zA-Z0-9#+]+)+)\s*$/gm,
+    (full, indent: string, broken: string) => {
+      const compact = broken.replace(/\s+/g, '').toLowerCase();
+      if (FENCE_LANG_ALIASES.includes(compact)) {
+        return `${indent}\`\`\`${compact}`;
+      }
+      return full;
+    },
+  );
+}
+
+/**
+ * Same issue across lines: ```htm then newline then l before the code body.
+ * Merge only when the two parts form a known lang and the second fragment is short (avoids java/script).
+ */
+function fixFenceLanguageSplitAcrossLines(text: string): string {
+  return text.replace(
+    /^(\s*)(```)([a-zA-Z0-9#+]+)\s*\r?\n([a-zA-Z0-9#+]+)\s*\r?\n/gm,
+    (full, indent, ticks, a, b) => {
+      const merged = `${a}${b}`.toLowerCase();
+      if (!FENCE_LANG_ALIASES.includes(merged)) return full;
+      const aLow = a.toLowerCase();
+      if (aLow === merged) return full;
+      if (!merged.startsWith(aLow) || aLow.length >= merged.length) return full;
+      if (b.length > 4) return full;
+      return `${indent}${ticks}${merged}\n`;
+    },
+  );
+}
+
 function fixGluedFenceOpen(text: string): string {
   let s = text;
   for (const lang of FENCE_LANG_ALIASES) {
@@ -130,7 +213,9 @@ function ensureClosedFence(text: string): string {
 }
 
 function fixFencedCodeGlitches(text: string): string {
-  let s = fixGluedFenceOpen(text);
+  let s = fixFenceLanguageSpacesOnLine(text);
+  s = fixFenceLanguageSplitAcrossLines(s);
+  s = fixGluedFenceOpen(s);
   s = ensureClosedFence(s);
   return s;
 }
@@ -150,7 +235,7 @@ function fixUnfencedCode(text: string): string {
     [/\b(java)\s*(?=(?:public|import|package)\s)/g,     'java'],
     [/\b(bash|shell|sh)\s*(?=#!\/)/gi,                  'bash'],
     [/\b(sql)\s*(?=(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP)\s)/gi, 'sql'],
-    [/\b(json)\s*(?=[\[{])/gi,                          'json'],
+    [/\b(json)\s*(?=(?:\[|{))/gi,                       'json'],
     [/\b(go)\s*(?=package\s)/g,                         'go'],
     [/\b(rust)\s*(?=fn\s)/g,                            'rust'],
     [/\b(cpp|c\+\+)\s*(?=#include\b)/gi,                'cpp'],
@@ -234,7 +319,8 @@ function fixChatMarkdownLayout(text: string): string {
 }
 
 function normalizeMarkdown(raw: string): string {
-  let result = fixFencedCodeGlitches(raw);
+  let result = fixModelBlockSeparators(raw);
+  result = fixFencedCodeGlitches(result);
   result = fixUnfencedCode(result);
   result = fixMarkdownTables(result);
   result = fixChatMarkdownLayout(result);

@@ -136,6 +136,17 @@ export default function App() {
     setActiveAssistant(null);
   }, []);
 
+  /** Never show office-assistant promptPrefix in the composer — only systemPrompt is used on send. */
+  useEffect(() => {
+    if (!activeAssistantResolved) return;
+    const p = activeAssistantResolved.promptPrefix;
+    if (!p) return;
+    setInput((prev) => {
+      if (!prev.startsWith(p)) return prev;
+      return prev.slice(p.length).replace(/^\s+/, '');
+    });
+  }, [activeAssistantResolved?.id]);
+
   const isLoggedIn = page !== 'login' && page !== 'signup';
   const permissions = usePermissions(isLoggedIn);
   const hasAdminAccess = accountRole === 'ADMIN' || permissions.permissionRoles.includes('SOVEREIGN');
@@ -277,16 +288,15 @@ export default function App() {
     if ((!text && pendingAttachments.length === 0) || isStreaming) return;
     setInput('');
 
-    const messageToSend = activeAssistantResolved
-      ? `${activeAssistantResolved.systemPrompt}\n\n${text}`
-      : text;
-
     send(
-      messageToSend,
+      text,
       thinkingMode,
       selectedModel,
       ragMode,
       pendingAttachments.length > 0 ? pendingAttachments : undefined,
+      activeAssistantResolved?.systemPrompt
+        ? { systemPrompt: activeAssistantResolved.systemPrompt }
+        : undefined,
     );
     setPendingAttachments([]);
     textareaRef.current?.focus();
@@ -461,6 +471,7 @@ export default function App() {
                     thinkingMode={thinkingMode}
                     selectedModel={selectedModel}
                     ragMode={ragMode}
+                    assistantSystemPrompt={activeAssistantResolved?.systemPrompt ?? null}
                   />
                 </div>
 
@@ -477,6 +488,7 @@ export default function App() {
               activeAssistantId={activeAssistant?.id ?? null}
               onSelectAssistant={(assistant) => {
                 setActiveAssistant(assistant);
+                setInput('');
                 setTimeout(() => textareaRef.current?.focus(), 0);
               }}
               onCreateAssistant={() => setShowCreateModal(true)}

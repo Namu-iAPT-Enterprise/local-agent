@@ -486,10 +486,16 @@ export function useChat() {
     model: ModelOption = DEFAULT_LOCAL_MODEL,
     ragMode = true,
     pending?: PendingChatAttachment[],
+    opts?: { systemPrompt?: string },
   ) => {
     if (isStreaming) return;
-    const built = buildOutgoing(text, pending, model);
-    if (!built.message && !built.images?.length) return;
+    const userCaption = text.trim();
+    const apiCaption = opts?.systemPrompt?.trim()
+      ? `${opts.systemPrompt.trim()}\n\n${userCaption}`
+      : userCaption;
+    const builtUi = buildOutgoing(userCaption, pending, model);
+    const builtApi = buildOutgoing(apiCaption, pending, model);
+    if (!builtUi.message && !builtUi.images?.length) return;
 
     const uiAttachments: UserAttachmentDisplay[] | undefined =
       pending && pending.length > 0
@@ -506,7 +512,7 @@ export function useChat() {
     rawRef.current = '';
     setMessages((prev) => [
       ...prev,
-      { role: 'user', content: built.message, attachments: uiAttachments },
+      { role: 'user', content: builtUi.message, attachments: uiAttachments },
     ]);
     setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'connecting' }]);
     setIsStreaming(true);
@@ -558,12 +564,12 @@ export function useChat() {
       if (model.isLocal) {
         const payload: Parameters<typeof postChatMessage>[0] = {
           sessionId: effectiveSessionId,
-          message: built.message,
-          thinking: shouldThink(built.message, thinking),
+          message: builtApi.message,
+          thinking: shouldThink(builtApi.message, thinking),
           model: model.name,
           useRag: ragMode,
         };
-        const nVision = built.images?.length ?? 0;
+        const nVision = builtApi.images?.length ?? 0;
         const imageParts: ChatImagePart[] | undefined =
           nVision > 0 && pending
             ? pending
@@ -573,7 +579,7 @@ export function useChat() {
         const useMultipart =
           nVision > 0 && imageParts && imageParts.length === nVision;
         if (nVision > 0 && !useMultipart) {
-          payload.images = built.images;
+          payload.images = builtApi.images;
         }
         const { sessionId: newSessionId } = await postChatMessage(
           payload,
@@ -603,8 +609,8 @@ export function useChat() {
 
         const payload = {
           sessionId: effectiveSessionId,
-          message: built.message,
-          thinking: shouldThink(built.message, thinking),
+          message: builtApi.message,
+          thinking: shouldThink(builtApi.message, thinking),
           model: model.name,
           platform: model.platform,
           baseUrl,
@@ -715,6 +721,7 @@ export function useChat() {
     thinking = false,
     model: ModelOption = DEFAULT_LOCAL_MODEL,
     ragMode = true,
+    systemPrompt?: string,
   ) => {
     if (isStreaming) return;
     const userMsg = messages[targetIdx - 1];
@@ -755,8 +762,18 @@ export function useChat() {
         }
       };
 
+      const apiMessage = systemPrompt?.trim()
+        ? `${systemPrompt.trim()}\n\n${userMsg.content}`
+        : userMsg.content;
+
       if (model.isLocal) {
-        const payload = { sessionId, message: userMsg.content, thinking: shouldThink(userMsg.content, thinking), model: model.name, useRag: ragMode };
+        const payload = {
+          sessionId,
+          message: apiMessage,
+          thinking: shouldThink(apiMessage, thinking),
+          model: model.name,
+          useRag: ragMode,
+        };
         const { sessionId: newSid } = await postChatMessage(payload, controller.signal);
         setSessionId(newSid);
         for await (const event of streamChatSession(newSid, controller.signal)) {
@@ -773,8 +790,8 @@ export function useChat() {
         // Route through main-server to enable RAG support for API models
         const payload = {
           sessionId,
-          message: userMsg.content,
-          thinking: shouldThink(userMsg.content, thinking),
+          message: apiMessage,
+          thinking: shouldThink(apiMessage, thinking),
           model: model.name,
           platform: model.platform,
           baseUrl,
