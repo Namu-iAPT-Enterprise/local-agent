@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Globe, Copy, Pencil, RefreshCw, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { getActiveServerStack } from '../../config/serverProfile';
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
   return (
@@ -27,8 +28,7 @@ export default function Remote() {
   const [copied, setCopied] = useState(false);
   const [qrExpiry, setQrExpiry] = useState(() => getExpiryTime(5));
 
-  const localIP = '192.168.0.3';
-  const port = 25808;
+  const { webUiLanHost: localIP, webUiPort: port } = getActiveServerStack();
   const accessURL = `http://${localIP}:${port}`;
   const username = 'admin';
   const password = 'a$qnOZ0m0Ic$';

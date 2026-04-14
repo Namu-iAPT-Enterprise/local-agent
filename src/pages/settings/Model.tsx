@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Info, Plus, X, Pencil, Search, Lightbulb, Trash2, CheckCircle, AlertCircle, Loader, Zap } from 'lucide-react';
 import { testOpenAICompatibleConnection } from '../../api/openaiClient';
+import { getOllamaOpenAiBaseUrl } from '../../config/serverProfile';
 
 // ── Platform config ────────────────────────────────────────────────────────────
 
@@ -9,7 +10,7 @@ const PLATFORMS: Record<string, { baseUrl: string; docsUrl?: string }> = {
   OpenAI:      { baseUrl: 'https://api.openai.com/v1' },
   Anthropic:   { baseUrl: 'https://api.anthropic.com/v1' },
   Gemini:      { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-  Ollama:      { baseUrl: 'http://localhost:11434/v1' },
+  Ollama:      { baseUrl: getOllamaOpenAiBaseUrl() },
   Custom:      { baseUrl: '' },
 };
 

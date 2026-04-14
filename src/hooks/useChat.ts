@@ -231,7 +231,7 @@ export function useChat() {
         const raw = err instanceof Error ? err.message : String(err);
         const errMsg =
           (raw.includes('Failed to fetch') || raw.includes('Load failed'))
-            ? 'Cannot reach the API gateway (check VITE_API_BASE in .env and that the gateway is running).'
+            ? 'Cannot reach the API gateway (check src/config/serverProfile.ts or VITE_API_BASE in .env and that the gateway is running).'
             : friendlyError(raw);
         if (last?.role === 'assistant') {
           return [...prev.slice(0, -1), { ...last, content: errMsg, error: true }];

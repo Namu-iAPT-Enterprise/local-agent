@@ -146,6 +146,12 @@ export async function deleteChatHistory(sessionId: string): Promise<void> {
  */
 export async function getSessions(): Promise<ChatSessionInfo[]> {
   const res = await fetchWithAuth(`${BASE}/api/chat/sessions`);
-  if (!res.ok) throw new Error(`Server returned ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    if (res.status >= 500) {
+      throw new Error(`Sessions endpoint returned a server error (${res.status})${detail ? ': ' + detail : ''}`);
+    }
+    throw new Error(`Failed to load sessions (${res.status})${detail ? ': ' + detail : ''}`);
+  }
   return res.json();
 }

@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+import { getDefaultApiBase, getDefaultRagBase } from './serverProfile';
+
 /**
  * Single public API base for the browser (no trailing slash).
  *
@@ -10,16 +12,18 @@
  * - **Do not** point the frontend at raw RAG **`…:8082`** unless you intentionally bypass main-server; upstream RAG is configured in main-server (`ragserver.base-url`), not here.
  * - **`192.168.0.6:8082` is not a valid substitute** for the gateway (`:8080`); different host/port roles.
  *
- * Set `VITE_API_BASE` (and optionally `VITE_RAG_BASE`) in `.env`. Restart dev server after changes.
+ * Defaults come from **`src/config/serverProfile.ts`** (`ACTIVE_SERVER_PROFILE`). Set `VITE_API_BASE` / `VITE_RAG_BASE` in `.env` to override. Restart dev server after changes.
  */
 const raw =
   (import.meta.env.VITE_API_BASE as string | undefined)?.trim() ||
-  'http://192.168.0.10:8080';
+  getDefaultApiBase();
 
 export const API_BASE = raw.replace(/\/$/, '');
 
 const rawRag =
-  (import.meta.env.VITE_RAG_BASE as string | undefined)?.trim() || raw;
+  (import.meta.env.VITE_RAG_BASE as string | undefined)?.trim() ||
+  (import.meta.env.VITE_API_BASE as string | undefined)?.trim() ||
+  getDefaultRagBase();
 
 /** Base for browser-facing `/rag/*` (ingest, query). Defaults to `API_BASE` when `VITE_RAG_BASE` is unset. */
 export const RAG_BASE = rawRag.replace(/\/$/, '');

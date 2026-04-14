@@ -61,12 +61,15 @@ export default function AssistantCards({
                 <div className={`w-10 h-10 rounded-full ${meta.iconBg} flex items-center justify-center flex-shrink-0`}>
                   <Icon size={20} className={meta.iconColor} />
                 </div>
-                <button 
+                <div
+                  role="button"
+                  tabIndex={0}
                   className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                   onClick={(e) => { e.stopPropagation(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
                 >
                   <MoreVertical size={16} className="text-gray-400" />
-                </button>
+                </div>
               </div>
 
               {/* Title */}
