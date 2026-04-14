@@ -405,11 +405,17 @@ export default function App() {
 
   const allAssistants = [...defaultAssistants, ...customAssistants];
 
-  const isLoggedIn = page === 'home' || page === 'settings';
+  // 로그인/회원가입 화면이 아닌 모든 페이지를 "로그인 상태"로 간주합니다.
+  // admin-users, requests, knowledge 등 권한이 필요한 페이지도 포함해야
+  // usePermissions 훅이 해당 페이지 진입 시 권한을 초기화하지 않습니다.
+  const isLoggedIn = page !== 'login' && page !== 'signup';
   const permissions = usePermissions(isLoggedIn);
   const hasAdminAccess = accountRole === 'ADMIN' || permissions.permissionRoles.includes('SOVEREIGN');
-  // Knowledge 화면: featureKey 기반으로 KEEPER·SOVEREIGN 모두 자동 포함됨
-  const hasKnowledgeAccess = accountRole === 'ADMIN' || permissions.allowedApis.some((a) => a.featureKey === 'KNOWLEDGE_REGISTER');
+  // Knowledge 화면: SOVEREIGN은 무조건 접근, KEEPER는 allowedApis에 KNOWLEDGE_REGISTER가 있으면 접근
+  const hasKnowledgeAccess = accountRole === 'ADMIN'
+    || permissions.permissionRoles.includes('SOVEREIGN')
+    || permissions.permissionRoles.includes('KEEPER')
+    || permissions.allowedApis.some((a) => a.featureKey === 'KNOWLEDGE_REGISTER');
 
   // Redirect to login when token refresh fails across the app
   useEffect(() => {
@@ -501,11 +507,12 @@ export default function App() {
       permissionRoles={permissions.permissionRoles}
     />
   );
-  // 계정 관리 화면 — 권한 없는 클라이언트에는 컴포넌트 번들 자체가 전달되지 않습니다.
-  // AdminUsersScreen 내부의 React.lazy 로드는 hasAdminAccess 가 true 인 경우에만 실행됩니다.
+  // 계정 관리 화면 — ADMIN 계정 역할 또는 SOVEREIGN 권한 역할 필요
+  // 권한 로딩이 끝나기 전(idle·loading)에는 판단을 보류합니다.
+  // 로딩 중에 섣불리 hasAdminAccess=false로 판정해 홈으로 튕기는 것을 방지합니다.
   if (page === 'admin-users') {
+    if (permissions.status === 'idle' || permissions.status === 'loading') return null;
     if (!hasAdminAccess) {
-      // 권한 없이 URL/상태를 직접 조작한 경우 즉시 홈으로 리다이렉트
       navigateTo('home');
       return null;
     }
@@ -513,6 +520,7 @@ export default function App() {
   }
 
   if (page === 'requests') {
+    if (permissions.status === 'idle' || permissions.status === 'loading') return null;
     if (!hasAdminAccess) {
       navigateTo('home');
       return null;
@@ -520,9 +528,10 @@ export default function App() {
     return <RequestsScreen onBack={() => navigateTo('home')} />;
   }
 
-  // 지식 관리 화면 — KEEPER·SOVEREIGN 또는 ADMIN 계정만 접근 가능
-  // KnowledgeScreen 내부의 React.lazy 로드는 hasKnowledgeAccess 가 true 인 경우에만 실행됩니다.
+  // 지식 관리 화면 — KEEPER·SOVEREIGN 권한 역할 또는 ADMIN 계정 역할 필요
+  // 권한 로딩이 끝나기 전(idle·loading)에는 판단을 보류합니다.
   if (page === 'knowledge') {
+    if (permissions.status === 'idle' || permissions.status === 'loading') return null;
     if (!hasKnowledgeAccess) {
       navigateTo('home');
       return null;

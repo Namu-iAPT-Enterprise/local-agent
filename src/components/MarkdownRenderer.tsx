@@ -135,45 +135,6 @@ function fixUnfencedCode(text: string): string {
 function normalizeMarkdown(raw: string): string {
   let result = fixUnfencedCode(raw);
 
-  // Fix unclosed bold/italic before Korean/CJK text
-  // Models output "*Namu Enterprise (주식회사 나무)" - add closing * before Korean
-  result = result.replace(/(\*)([^*]+?)(?<!\*)[가-힣]/g, '$1$2*$3');
-
-  // Fix unclosed bold at end of lines that aren't closed
-  result = result.replace(/(\*)([^\n*]+?)(\p{L})(\s*$)/gm, '$1$2$3*$4');
-
-  // Fix double asterisk bold with Korean: **text (Korean)** -> **text** (Korean)
-  result = result.replace(/\*\*([^*]+?)[가-힣]/g, (match, text) => {
-    return '**' + text.trim() + '**';
-  });
-
-  // Fix tables with unclosed bold/italic in cells (e.g., **Details* -> **Details**)
-  result = result.replace(/(\*\*)([^*]+?)(\*)?(?=\s*\|)/g, (match, open, text, star) => {
-    return '**' + text.trim() + '**';
-  });
-
-  // Fix underscore italic with Korean
-  result = result.replace(/(_)([^_\n]+?)(?<!\*)[가-힣]/g, '$1$2_$3');
-
-  // Fix broken tables - normalize pipe spacing and missing pipes
-  // Pattern: | text without proper pipe spacing
-  result = result.replace(/\|(\s*)([^\n|]+?)(\s*)\|/g, (match, before, cell, after) => {
-    return '| ' + cell.trim() + ' |';
-  });
-
-  // Fix tables missing closing pipe
-  result = result.replace(/(\|.*[^\|])\n/g, '$1 |\n');
-
-  // Ensure headings start on a new line
-  result = result.replace(/([^\n])(#{1,6} )/g, '$1\n\n$2')
-    // Ensure unordered list items start on a new line
-    .replace(/([^\n])([-*+] )/g, '$1\n$2')
-    // Ensure ordered list items start on a new line
-    .replace(/([^\n])(\d+\. )/g, '$1\n$2')
-    // Collapse 3+ blank lines to 2
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
   return result;
 }
 

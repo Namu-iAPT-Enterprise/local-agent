@@ -169,13 +169,22 @@ export default function Sidebar({
 
   const isAdmin = accountRole === 'ADMIN';
   const isSovereign = permissionRoles.includes('SOVEREIGN');
+  const isKeeper   = permissionRoles.includes('KEEPER');
   const hasAdminAccess = isAdmin || isSovereign;
   const isLoaded = permissionsStatus === 'loaded' || permissionsStatus === 'loading';
   const hasNoRoles = isLoaded && permissionRoles.length === 0;
 
-  // Apps: isApp=true 중 권한 충족 항목
+  // knowledge 화면: SOVEREIGN·KEEPER 역할 보유자는 allowedApis 유무와 무관하게 접근 허용
+  // (Role Server 정책에 KNOWLEDGE_REGISTER featureKey가 누락된 경우 방어)
+  function hasFeatureAccess(f: typeof APP_FEATURES[number]): boolean {
+    if (f.adminOnly) return hasAdminAccess;
+    if (f.id === 'knowledge-manage') return isSovereign || isKeeper || hasAppAccess(f.requiredFeatureKeys, allowedApis);
+    return hasAppAccess(f.requiredFeatureKeys, allowedApis);
+  }
+
+  // Apps: 권한 충족 항목만 표시
   const appFeatures = isLoaded
-    ? APP_FEATURES.filter((f) => f.adminOnly ? hasAdminAccess : hasAppAccess(f.requiredFeatureKeys, allowedApis))
+    ? APP_FEATURES.filter((f) => hasFeatureAccess(f))
     : [];
 
   // 권한 패널: 모든 allowedApis를 이름과 아이콘으로 매핑
