@@ -54,6 +54,25 @@ function buildMetadata(category: string, customCategory: string, extra?: Record<
   return { ...(cat ? { category: cat } : {}), ...(extra ?? {}) };
 }
 
+/** Parse Spring / gateway JSON errors; add a hint for opaque 500s from the RAG stack. */
+function formatIngestHttpError(res: Response, bodyText: string): string {
+  const raw = bodyText.trim();
+  let detail = raw;
+  try {
+    const j = JSON.parse(raw) as { message?: string; error?: string; path?: string };
+    if (j.message) detail = j.message;
+    else if (typeof j.error === 'string') detail = j.path ? `${j.error} (${j.path})` : j.error;
+  } catch {
+    /* keep raw */
+  }
+  if (res.status === 500 && detail.length < 400) {
+    const hint =
+      'Check ragServer logs. Often: Chroma not running (:8000), or Ollama missing embeddings (`ollama pull nomic-embed-text`).';
+    return detail ? `${detail} — ${hint}` : hint;
+  }
+  return detail;
+}
+
 // ── Shared sub-components ──────────────────────────────────────────────────────
 
 function ResultBanner({ result }: { result: IngestResult }) {
@@ -240,7 +259,7 @@ export default function Knowledge() {
         setSingleCustomCategory('');
       } else {
         const err = await res.text();
-        setSingleResult({ status: 'error', message: `Something went wrong: ${err}` });
+        setSingleResult({ status: 'error', message: `Something went wrong: ${formatIngestHttpError(res, err)}` });
       }
     } catch (err) {
       setSingleResult({ status: 'error', message: `Could not connect to server: ${err instanceof Error ? err.message : 'Unknown error'}` });
@@ -274,7 +293,7 @@ export default function Knowledge() {
         setBatchDocs([]);
       } else {
         const err = await res.text();
-        setBatchResult({ status: 'error', message: `Something went wrong: ${err}` });
+        setBatchResult({ status: 'error', message: `Something went wrong: ${formatIngestHttpError(res, err)}` });
       }
     } catch (err) {
       setBatchResult({ status: 'error', message: `Could not connect to server: ${err instanceof Error ? err.message : 'Unknown error'}` });
@@ -331,7 +350,7 @@ export default function Knowledge() {
         setFileCustomCategory('');
       } else {
         const err = await res.text();
-        setFileResult({ status: 'error', message: `Something went wrong: ${err}` });
+        setFileResult({ status: 'error', message: `Something went wrong: ${formatIngestHttpError(res, err)}` });
       }
     } catch (err) {
       setFileResult({ status: 'error', message: `Could not connect to server: ${err instanceof Error ? err.message : 'Unknown error'}` });

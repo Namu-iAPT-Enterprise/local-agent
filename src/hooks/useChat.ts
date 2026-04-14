@@ -11,9 +11,10 @@ export interface ModelOption {
   isLocal: boolean;
 }
 
+/** Ollama tags from `ollama list` (chat models). Embedding models (e.g. nomic-embed-text) are omitted. */
 export const LOCAL_MODELS: ModelOption[] = [
-  { id: 'qwen3.5-4b',    name: 'qwen3-vl:4b',    platform: 'Ollama', isLocal: true },
-  { id: 'exaone3.5-2.4b', name: 'exaone3.5:2.4b', platform: 'Ollama', isLocal: true },
+  { id: 'qwen3-vl:4b', name: 'qwen3-vl:4b', platform: 'Ollama', isLocal: true },
+  { id: 'exaone3.5:2.4b', name: 'exaone3.5:2.4b', platform: 'Ollama', isLocal: true },
 ];
 
 export interface AssistantVariant {
