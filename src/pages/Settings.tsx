@@ -14,8 +14,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings as SettingsIcon,
-  Database,
   ShieldCheck,
+  Inbox,
 } from 'lucide-react';
 import Model from './settings/Model';
 import Assistants from './settings/Assistants';
@@ -24,22 +24,24 @@ import Display from './settings/Display';
 import Remote from './settings/Remote';
 import System from './settings/System';
 import About from './settings/About';
-import Knowledge from './settings/Knowledge';
 import AdminUsers from './settings/AdminUsers';
+import Requests from './settings/Requests';
 
-const BASE_TAB_IDS = ['model','assistants','skills-hub','display','remote','system','knowledge','about'] as const;
+const BASE_TAB_IDS = ['model','assistants','skills-hub','display','remote','system','about'] as const;
 type BaseTabId = typeof BASE_TAB_IDS[number];
-type TabId = BaseTabId | 'admin-users';
+type TabId = BaseTabId | 'admin-users' | 'requests';
 
 const TAB_ICONS: Record<TabId, React.ElementType> = {
   model: Cpu, assistants: Users, 'skills-hub': Zap, display: Monitor,
-  remote: Globe, system: LayoutGrid, knowledge: Database, about: Info,
+  remote: Globe, system: LayoutGrid, about: Info,
   'admin-users': ShieldCheck,
+  'requests': Inbox,
 };
 const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
   model: Model, assistants: Assistants, 'skills-hub': SkillsHub, display: Display,
-  remote: Remote, system: System, knowledge: Knowledge, about: About,
+  remote: Remote, system: System, about: About,
   'admin-users': AdminUsers,
+  'requests': Requests,
 };
 
 interface SettingsProps {
@@ -61,11 +63,14 @@ export default function Settings({ onBack, accountRole = null, permissionRoles =
 
   const tabLabels: Record<TabId, string> = {
     model: tr.model, assistants: tr.assistants, 'skills-hub': tr.skillsHub,
-    display: tr.display, remote: tr.remote, system: tr.system, knowledge: tr.knowledge, about: tr.about,
-    'admin-users': '계정 관리',
+    display: tr.display, remote: tr.remote, system: tr.system, about: tr.about,
+    'admin-users': 'Admin Users',
+    'requests': 'Requests',
   };
 
-  const visibleTabIds: TabId[] = [...BASE_TAB_IDS, ...(hasAdminAccess ? ['admin-users' as const] : [])];
+  const visibleTabIds: TabId[] = [
+    ...BASE_TAB_IDS,
+  ];
   const tabs = visibleTabIds.map((id) => ({ id, label: tabLabels[id], icon: TAB_ICONS[id] }));
   const ActiveComponent = TAB_COMPONENTS[activeTab] ?? Model;
 

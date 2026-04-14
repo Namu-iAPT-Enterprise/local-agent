@@ -3,11 +3,8 @@ import {
   Plus, Search, Settings, PanelLeftClose, PanelLeftOpen,
   Inbox, LogOut, Trash2, MessageSquare,
   ChevronDown, ChevronUp, LayoutGrid, Shield,
-  Users, HardDrive, ScrollText,
-  MessageSquare as ChatIcon, Upload, FolderOpen,
-  BookPlus, FileEdit, Trash2 as TrashIcon,
-  Megaphone, Bell, RefreshCw, ShieldPlus, User,
-  CheckCircle, AlertCircle, Server,
+  RefreshCw, ShieldPlus, User,
+  CheckCircle, AlertCircle, Server
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useLang } from '../context/LanguageContext';
@@ -15,51 +12,23 @@ import { getSessions, deleteChatHistory, ChatSessionInfo } from '../api/chat';
 import { postManagementRequest, reloadUserPermissionCache } from '../api/gateway';
 import type { AllowedApi } from '../api/gateway';
 import type { PermissionStatus } from '../hooks/usePermissions';
-
-// ── Feature definitions ───────────────────────────────────────────────────────
-
-interface FeatureDef {
-  featureKey: string;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  pathPrefix: string;
-  label: string;
-  description: string;
-  category: 'chat' | 'file' | 'knowledge' | 'notice' | 'admin';
-  icon: React.ElementType;
-  adminOnly?: boolean;
-  /** true = Apps 섹션 표시 (지식·공지·관리 등 별도 액션) */
-  isApp?: boolean;
-}
-
-const FEATURES: FeatureDef[] = [
-  // 권한 목록에만 표시 (기본 기능)
-  { featureKey: 'CHAT_MESSAGE',       method: 'POST',   pathPrefix: '/api/chat/message', label: '채팅',       description: '채팅 메시지 전송',        category: 'chat',      icon: ChatIcon,   isApp: false },
-  { featureKey: 'FILE_UPLOAD',        method: 'POST',   pathPrefix: '/api/files',        label: '파일 업로드', description: '파일 업로드',              category: 'file',      icon: Upload,     isApp: false },
-  { featureKey: 'FILE_VIEW',          method: 'GET',    pathPrefix: '/api/files',        label: '파일 조회',   description: '파일 목록 및 다운로드',    category: 'file',      icon: FolderOpen, isApp: false },
-  // Apps + 권한 목록 모두 표시
-  { featureKey: 'KNOWLEDGE_REGISTER', method: 'POST',   pathPrefix: '/api/knowledge',    label: '지식 등록',   description: '지식 RAG 등록',           category: 'knowledge', icon: BookPlus,   isApp: true  },
-  { featureKey: 'KNOWLEDGE_UPDATE',   method: 'PUT',    pathPrefix: '/api/knowledge',    label: '지식 수정',   description: '지식 항목 수정',           category: 'knowledge', icon: FileEdit,   isApp: true  },
-  { featureKey: 'KNOWLEDGE_DELETE',   method: 'DELETE', pathPrefix: '/api/knowledge',    label: '지식 삭제',   description: '지식 항목 삭제',           category: 'knowledge', icon: TrashIcon,  isApp: true  },
-  { featureKey: 'NOTICE_SEND_ROLE',   method: 'POST',   pathPrefix: '/api/notice',       label: '역할 공지',   description: '특정 역할 대상 공지 발송', category: 'notice',    icon: Megaphone,  isApp: true  },
-  { featureKey: 'NOTICE_SEND_ALL',    method: 'POST',   pathPrefix: '/api/notice/all',   label: '전체 공지',   description: '전체 사용자 공지 발송',    category: 'notice',    icon: Bell,       isApp: true  },
-  { featureKey: 'ADMIN_USERS',        method: 'GET',    pathPrefix: '/api/admin/users',  label: '계정 관리',   description: '사용자 역할 관리',         category: 'admin',     icon: Users,      isApp: true, adminOnly: true },
-  { featureKey: 'ADMIN_BACKUP',       method: 'GET',    pathPrefix: '/api/backups',      label: '백업 관리',   description: '시스템 백업 조회',         category: 'admin',     icon: HardDrive,  isApp: true, adminOnly: true },
-  { featureKey: 'ADMIN_LOG',          method: 'GET',    pathPrefix: '/api/log',          label: '로그 조회',   description: '시스템 운영 로그',         category: 'admin',     icon: ScrollText, isApp: true, adminOnly: true },
-];
+import { APP_FEATURES, getMappedApiInfo, FeatureCategory } from '../config/apiPermissions';
 
 const METHOD_COLORS: Record<string, string> = {
   GET:    'text-sky-500 dark:text-sky-400',
   POST:   'text-emerald-500 dark:text-emerald-400',
   PUT:    'text-violet-500 dark:text-violet-400',
   DELETE: 'text-red-500 dark:text-red-400',
+  PATCH:  'text-amber-500 dark:text-amber-400',
 };
 
-const CATEGORY_COLOR: Record<FeatureDef['category'], string> = {
+const CATEGORY_COLOR: Record<FeatureCategory, string> = {
   chat:      'text-blue-500',
   file:      'text-blue-500',
   knowledge: 'text-emerald-500',
   notice:    'text-amber-500',
   admin:     'text-rose-500',
+  request:   'text-violet-500',
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -69,11 +38,8 @@ const ROLE_COLORS: Record<string, string> = {
   SOVEREIGN:'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
 };
 
-function isFeatureAllowed(feature: FeatureDef, allowedApis: AllowedApi[]): boolean {
-  return allowedApis.some((api) => {
-    if (feature.featureKey && api.featureKey) return api.featureKey === feature.featureKey;
-    return api.method.toUpperCase() === feature.method && api.path.startsWith(feature.pathPrefix);
-  });
+function hasAppAccess(featureKeys: string[], allowedApis: AllowedApi[]): boolean {
+  return allowedApis.some(api => api.featureKey && featureKeys.includes(api.featureKey));
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -209,12 +175,12 @@ export default function Sidebar({
 
   // Apps: isApp=true 중 권한 충족 항목
   const appFeatures = isLoaded
-    ? FEATURES.filter((f) => f.isApp && (f.adminOnly ? hasAdminAccess : isFeatureAllowed(f, allowedApis)))
+    ? APP_FEATURES.filter((f) => f.adminOnly ? hasAdminAccess : hasAppAccess(f.requiredFeatureKeys, allowedApis))
     : [];
 
-  // 권한 패널: 모든 feature 중 권한 충족 항목 (기본기능 포함)
-  const allAllowedFeatures = isLoaded
-    ? FEATURES.filter((f) => f.adminOnly ? hasAdminAccess : isFeatureAllowed(f, allowedApis))
+  // 권한 패널: 모든 allowedApis를 이름과 아이콘으로 매핑
+  const allowedApiItems = isLoaded
+    ? allowedApis.map(api => ({ ...api, ...getMappedApiInfo(api) }))
     : [];
 
   const showApps = appFeatures.length > 0;
@@ -290,8 +256,8 @@ export default function Sidebar({
               {appFeatures.map((f) => {
                 const Icon = f.icon;
                 return (
-                  <button key={f.featureKey} title={`${f.label} — ${f.description}`}
-                    onClick={() => onFeatureClick?.(f.featureKey)}
+                  <button key={f.id} title={`${f.label} — ${f.description}`}
+                    onClick={() => onFeatureClick?.(f.requiredFeatureKeys[0])} // Use first required featureKey for navigation
                     className={`w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer ${CATEGORY_COLOR[f.category]}`}>
                     <Icon size={16} />
                   </button>
@@ -310,12 +276,11 @@ export default function Sidebar({
                   {appFeatures.map((f) => {
                     const Icon = f.icon;
                     return (
-                      <button key={f.featureKey} title={f.description}
-                        onClick={() => onFeatureClick?.(f.featureKey)}
+                      <button key={f.id} title={f.description}
+                        onClick={() => onFeatureClick?.(f.requiredFeatureKeys[0])}
                         className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-gray-700/60 transition-colors text-left cursor-pointer">
                         <Icon size={14} className={`flex-shrink-0 ${CATEGORY_COLOR[f.category]}`} />
                         <span className="flex-1 text-xs font-medium truncate">{f.label}</span>
-                        <span className={`text-[9px] font-bold font-mono flex-shrink-0 ${METHOD_COLORS[f.method] ?? 'text-gray-400'}`}>{f.method}</span>
                       </button>
                     );
                   })}
@@ -399,15 +364,15 @@ export default function Sidebar({
             )}
 
             {/* Allowed features */}
-            {allAllowedFeatures.length > 0 && (
+            {allowedApiItems.length > 0 && (
               <div className="space-y-0.5">
-                {allAllowedFeatures.map((f) => {
-                  const Icon = f.icon;
+                {allowedApiItems.map((apiItem, idx) => {
+                  const Icon = apiItem.icon;
                   return (
-                    <div key={f.featureKey} className="flex items-center gap-2 px-1.5 py-1 rounded text-xs text-gray-500 dark:text-gray-400">
-                      <Icon size={11} className={`flex-shrink-0 ${CATEGORY_COLOR[f.category]}`} />
-                      <span className="flex-1 truncate">{f.label}</span>
-                      <span className={`text-[9px] font-bold font-mono ${METHOD_COLORS[f.method] ?? 'text-gray-400'}`}>{f.method}</span>
+                    <div key={`${apiItem.method}-${apiItem.path}-${idx}`} className="flex items-center gap-2 px-1.5 py-1 rounded text-xs text-gray-500 dark:text-gray-400">
+                      <Icon size={11} className={`flex-shrink-0 ${CATEGORY_COLOR[apiItem.category]}`} />
+                      <span className="flex-1 truncate">{apiItem.label}</span>
+                      <span className={`text-[9px] font-bold font-mono ${METHOD_COLORS[apiItem.method] ?? 'text-gray-400'}`}>{apiItem.method}</span>
                     </div>
                   );
                 })}

@@ -8,135 +8,12 @@ import {
 } from 'lucide-react';
 import type { AllowedApi } from '../api/gateway';
 import type { PermissionStatus } from '../hooks/usePermissions';
-
-// ── Feature definitions ────────────────────────────────────────────────────────
-
-interface FeatureDef {
-  featureKey: string;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  /** Used for path-based fallback matching when featureKey is absent in response */
-  pathPrefix: string;
-  label: string;
-  description: string;
-  category: 'chat' | 'file' | 'knowledge' | 'notice' | 'admin';
-  icon: React.ElementType;
-  /** If true, visibility is based on accountRole === 'ADMIN', not allowedApis */
-  adminOnly?: boolean;
-}
-
-const FEATURES: FeatureDef[] = [
-  // ── 채팅 & 파일 ─────────────────────────────────────────────────────────────
-  {
-    featureKey: 'CHAT_MESSAGE',
-    method: 'POST',
-    pathPrefix: '/api/chat/message',
-    label: '채팅 전송',
-    description: '채팅 메시지 전송',
-    category: 'chat',
-    icon: MessageSquare,
-  },
-  {
-    featureKey: 'FILE_UPLOAD',
-    method: 'POST',
-    pathPrefix: '/api/files',
-    label: '파일 업로드',
-    description: '파일 업로드',
-    category: 'file',
-    icon: Upload,
-  },
-  {
-    featureKey: 'FILE_VIEW',
-    method: 'GET',
-    pathPrefix: '/api/files',
-    label: '파일 조회',
-    description: '파일 목록 및 다운로드',
-    category: 'file',
-    icon: FolderOpen,
-  },
-  // ── 지식 관리 ────────────────────────────────────────────────────────────────
-  {
-    featureKey: 'KNOWLEDGE_REGISTER',
-    method: 'POST',
-    pathPrefix: '/api/knowledge',
-    label: '지식 등록',
-    description: '지식 RAG 등록',
-    category: 'knowledge',
-    icon: BookPlus,
-  },
-  {
-    featureKey: 'KNOWLEDGE_UPDATE',
-    method: 'PUT',
-    pathPrefix: '/api/knowledge',
-    label: '지식 수정',
-    description: '지식 항목 수정',
-    category: 'knowledge',
-    icon: FileEdit,
-  },
-  {
-    featureKey: 'KNOWLEDGE_DELETE',
-    method: 'DELETE',
-    pathPrefix: '/api/knowledge',
-    label: '지식 삭제',
-    description: '지식 항목 삭제',
-    category: 'knowledge',
-    icon: Trash2,
-  },
-  // ── 공지 ─────────────────────────────────────────────────────────────────────
-  {
-    featureKey: 'NOTICE_SEND_ROLE',
-    method: 'POST',
-    pathPrefix: '/api/notice',
-    label: '역할 공지 발송',
-    description: '특정 역할 대상 공지 발송',
-    category: 'notice',
-    icon: Megaphone,
-  },
-  {
-    featureKey: 'NOTICE_SEND_ALL',
-    method: 'POST',
-    pathPrefix: '/api/notice/all',
-    label: '전체 공지 발송',
-    description: '전체 사용자 공지 발송',
-    category: 'notice',
-    icon: Bell,
-  },
-  // ── 관리자 (계정 역할 ADMIN) ──────────────────────────────────────────────────
-  {
-    featureKey: 'ADMIN_USERS',
-    method: 'GET',
-    pathPrefix: '/api/admin/users',
-    label: '계정 관리',
-    description: '사용자 계정 조회 및 관리',
-    category: 'admin',
-    icon: Users,
-    adminOnly: true,
-  },
-  {
-    featureKey: 'ADMIN_BACKUP',
-    method: 'GET',
-    pathPrefix: '/api/backups',
-    label: '백업 관리',
-    description: '시스템 백업 조회',
-    category: 'admin',
-    icon: HardDrive,
-    adminOnly: true,
-  },
-  {
-    featureKey: 'ADMIN_LOG',
-    method: 'GET',
-    pathPrefix: '/api/log',
-    label: '로그 조회',
-    description: '시스템 운영 로그',
-    category: 'admin',
-    icon: ScrollText,
-    adminOnly: true,
-  },
-];
+import { getMappedApiInfo, FeatureCategory } from '../config/apiPermissions';
 
 // ── Category metadata ─────────────────────────────────────────────────────────
 
 const CATEGORY_META: Record<
-  FeatureDef['category'],
+  FeatureCategory,
   { label: string; colorClass: string; badgeClass: string; methodBadge: Record<string, string> }
 > = {
   chat: {
@@ -148,6 +25,7 @@ const CATEGORY_META: Record<
       POST:   'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
       PUT:    'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
       DELETE: 'bg-red-100  dark:bg-red-900/30  text-red-600  dark:text-red-400',
+      PATCH:  'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
     },
   },
   file: {
@@ -159,6 +37,7 @@ const CATEGORY_META: Record<
       POST:   'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
       PUT:    'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
       DELETE: 'bg-red-100  dark:bg-red-900/30  text-red-600  dark:text-red-400',
+      PATCH:  'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
     },
   },
   knowledge: {
@@ -170,6 +49,7 @@ const CATEGORY_META: Record<
       POST:   'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
       PUT:    'bg-violet-100  dark:bg-violet-900/30  text-violet-600  dark:text-violet-400',
       DELETE: 'bg-red-100    dark:bg-red-900/30    text-red-600    dark:text-red-400',
+      PATCH:  'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
     },
   },
   notice: {
@@ -181,6 +61,7 @@ const CATEGORY_META: Record<
       POST:   'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
       PUT:    'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
       DELETE: 'bg-red-100   dark:bg-red-900/30   text-red-600   dark:text-red-400',
+      PATCH:  'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
     },
   },
   admin: {
@@ -192,38 +73,37 @@ const CATEGORY_META: Record<
       POST:   'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400',
       PUT:    'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
       DELETE: 'bg-red-100  dark:bg-red-900/30  text-red-600  dark:text-red-400',
+      PATCH:  'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
+    },
+  },
+  request: {
+    label: '문의사항',
+    colorClass: 'text-violet-600 dark:text-violet-400',
+    badgeClass: 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800',
+    methodBadge: {
+      GET:    'bg-sky-100  dark:bg-sky-900/30  text-sky-600  dark:text-sky-400',
+      POST:   'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
+      PUT:    'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
+      DELETE: 'bg-red-100  dark:bg-red-900/30  text-red-600  dark:text-red-400',
+      PATCH:  'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
     },
   },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function isFeatureAllowed(feature: FeatureDef, allowedApis: AllowedApi[]): boolean {
-  return allowedApis.some((api) => {
-    // Prefer featureKey match if the gateway response includes it
-    if (feature.featureKey && api.featureKey) {
-      return api.featureKey === feature.featureKey;
-    }
-    // Fall back to method + path prefix match
-    return (
-      api.method.toUpperCase() === feature.method &&
-      api.path.startsWith(feature.pathPrefix)
-    );
-  });
-}
-
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 /** Single feature card button */
-function FeatureCard({ feature }: { feature: FeatureDef }) {
-  const meta = CATEGORY_META[feature.category];
-  const Icon = feature.icon;
-  const methodColors = meta.methodBadge[feature.method] ?? 'bg-gray-100 text-gray-500';
+function FeatureCard({ apiItem }: { apiItem: ReturnType<typeof getMappedApiInfo> & AllowedApi }) {
+  const meta = CATEGORY_META[apiItem.category];
+  const Icon = apiItem.icon;
+  const methodColors = meta.methodBadge[apiItem.method] ?? 'bg-gray-100 text-gray-500';
 
   return (
     <button
       type="button"
-      title={feature.description}
+      title={apiItem.description ?? apiItem.label}
       className="flex flex-col text-left border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm transition-all overflow-hidden group cursor-default"
     >
       <div className="px-3 pt-3 pb-2.5 flex flex-col gap-1.5">
@@ -233,22 +113,17 @@ function FeatureCard({ feature }: { feature: FeatureDef }) {
             <Icon size={14} />
           </div>
           <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 leading-tight">
-            {feature.label}
+            {apiItem.label}
           </span>
         </div>
-
-        {/* Description */}
-        <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug pl-0.5">
-          {feature.description}
-        </p>
 
         {/* Method + path */}
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${methodColors}`}>
-            {feature.method}
+            {apiItem.method}
           </span>
-          <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate">
-            {feature.pathPrefix}
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate" title={apiItem.path}>
+            {apiItem.path}
           </span>
         </div>
       </div>
@@ -279,20 +154,21 @@ function SkeletonCard() {
 // ── Section group ─────────────────────────────────────────────────────────────
 
 interface SectionProps {
-  categoryKey: FeatureDef['category'];
-  features: FeatureDef[];
+  categoryKey: FeatureCategory;
+  features: (ReturnType<typeof getMappedApiInfo> & AllowedApi)[];
 }
 
 function FeatureSection({ categoryKey, features }: SectionProps) {
   const meta = CATEGORY_META[categoryKey];
+  if (!meta) return null;
   return (
     <div className="mb-4">
       <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${meta.colorClass}`}>
         {meta.label}
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-2">
-        {features.map((f) => (
-          <FeatureCard key={f.featureKey} feature={f} />
+        {features.map((f, idx) => (
+          <FeatureCard key={`${f.method}-${f.path}-${idx}`} apiItem={f} />
         ))}
       </div>
     </div>
@@ -316,17 +192,14 @@ export default function FeatureCards({
 }: FeatureCardsProps) {
   const isAdmin = accountRole === 'ADMIN';
 
-  // Determine visible features
-  const visibleFeatures = FEATURES.filter((f) => {
-    if (f.adminOnly) return isAdmin;
-    return isFeatureAllowed(f, allowedApis);
-  });
+  // Determine visible features mapped from allowedApis
+  const mappedApis = allowedApis.map(api => ({ ...api, ...getMappedApiInfo(api) }));
 
   // Group by category order
-  const categoryOrder: FeatureDef['category'][] = ['chat', 'file', 'knowledge', 'notice', 'admin'];
+  const categoryOrder: FeatureCategory[] = ['chat', 'file', 'knowledge', 'notice', 'admin', 'request'];
 
-  const grouped = categoryOrder.reduce<Record<string, FeatureDef[]>>((acc, cat) => {
-    const items = visibleFeatures.filter((f) => f.category === cat);
+  const grouped = categoryOrder.reduce<Record<string, typeof mappedApis>>((acc, cat) => {
+    const items = mappedApis.filter((f) => f.category === cat);
     if (items.length > 0) acc[cat] = items;
     return acc;
   }, {});
@@ -352,7 +225,7 @@ export default function FeatureCards({
   if (status === 'error') return null;
 
   // ── Loaded — nothing visible ───────────────────────────────────────────────
-  if (status === 'loaded' && visibleFeatures.length === 0) {
+  if (status === 'loaded' && mappedApis.length === 0) {
     return (
       <div className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500 text-center">
         사용 가능한 추가 기능이 없습니다.
@@ -361,7 +234,7 @@ export default function FeatureCards({
   }
 
   // ── Idle (not yet logged in / no features to show yet) ─────────────────────
-  if (status === 'idle' || visibleFeatures.length === 0) return null;
+  if (status === 'idle' || mappedApis.length === 0) return null;
 
   // ── Loaded ─────────────────────────────────────────────────────────────────
   return (

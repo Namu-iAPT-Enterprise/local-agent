@@ -150,3 +150,26 @@ export async function postManagementRequest(
   if (!res.ok) throw new Error(`요청 전송 실패 (${res.status})`);
   return res.json();
 }
+
+/**
+ * GET /api/management/request/list
+ * 전체 문의사항 목록을 조회합니다. SOVEREIGN 이상 필요.
+ */
+export async function fetchManagementRequests(): Promise<ManagementRequestResponse[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/request/list`);
+  if (res.status === 403) throw new Error('접근 권한이 없습니다 (SOVEREIGN 이상 필요).');
+  if (!res.ok) throw new Error(`문의 목록 조회 실패 (${res.status})`);
+  return res.json();
+}
+
+/**
+ * GET /api/management/request/<request-ID>
+ * 특정 문의사항을 조회합니다. SOVEREIGN 이상 필요.
+ */
+export async function fetchManagementRequest(requestId: string): Promise<ManagementRequestResponse> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/request/${encodeURIComponent(requestId)}`);
+  if (res.status === 403) throw new Error('접근 권한이 없습니다 (SOVEREIGN 이상 필요).');
+  if (res.status === 404) throw new NotFoundError('문의사항을 찾을 수 없습니다.');
+  if (!res.ok) throw new Error(`문의사항 조회 실패 (${res.status})`);
+  return res.json();
+}

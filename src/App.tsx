@@ -7,6 +7,8 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import AdminUsersScreen from './components/AdminUsersScreen';
+import RequestsScreen from './components/RequestsScreen';
+import KnowledgeScreen from './components/KnowledgeScreen';
 import { useTheme } from './context/ThemeContext';
 import { useLang } from './context/LanguageContext';
 import { useChat, ModelOption, LOCAL_MODELS } from './hooks/useChat';
@@ -309,13 +311,59 @@ function AssistantMessageActions({
 
 export default function App() {
   const [input, setInput] = useState('');
-  const [page, setPage] = useState<'login' | 'signup' | 'home' | 'settings' | 'admin-users'>(
-    getAccessToken() ? 'home' : 'login'
-  );
+  const [page, setPage] = useState<'login' | 'signup' | 'home' | 'settings' | 'admin-users' | 'requests' | 'knowledge'>(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (['login', 'signup', 'home', 'settings', 'admin-users', 'requests', 'knowledge'].includes(hash)) {
+      return hash as any;
+    }
+    return getAccessToken() ? 'home' : 'login';
+  });
+
+  const navigateTo = (newPage: typeof page) => {
+    setPage(newPage);
+    window.history.pushState({ page: newPage }, '', `#${newPage}`);
+  };
+
+  useEffect(() => {
+    // Sync initial state to history if not there
+    if (!window.history.state?.page) {
+      window.history.replaceState({ page }, '', `#${page}`);
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && event.state.page) {
+        setPage(event.state.page);
+      } else {
+        const hash = window.location.hash.replace('#', '');
+        if (['login', 'signup', 'home', 'settings', 'admin-users', 'requests', 'knowledge'].includes(hash)) {
+          setPage(hash as any);
+        } else {
+          setPage(getAccessToken() ? 'home' : 'login');
+        }
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [thinkingMode, setThinkingMode] = useState(false);
-  const [ragMode, setRagMode] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<ModelOption>(LOCAL_MODELS[0]);
+  const [thinkingMode, setThinkingMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('namu_thinking_mode');
+    return saved !== null ? saved === 'true' : false;
+  });
+  const [ragMode, setRagMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('namu_rag_mode');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [selectedModel, setSelectedModel] = useState<ModelOption>(() => {
+    const saved = localStorage.getItem('namu_selected_model');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return LOCAL_MODELS[0];
+  });
   const [sessionRefresh, setSessionRefresh] = useState(0);
   const [accountRole, setAccountRole] = useState<string | null>(getAccountRole());
   const { bgImage } = useTheme();
@@ -324,7 +372,35 @@ export default function App() {
 
   // Office assistants state
   const [customAssistants, setCustomAssistants] = useState<OfficeAssistant[]>(() => getCustomAssistants());
-  const [activeAssistant, setActiveAssistant] = useState<OfficeAssistant | null>(null);
+  const [activeAssistant, setActiveAssistant] = useState<OfficeAssistant | null>(() => {
+    const saved = localStorage.getItem('namu_active_assistant');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('namu_thinking_mode', String(thinkingMode));
+  }, [thinkingMode]);
+
+  useEffect(() => {
+    localStorage.setItem('namu_rag_mode', String(ragMode));
+  }, [ragMode]);
+
+  useEffect(() => {
+    localStorage.setItem('namu_selected_model', JSON.stringify(selectedModel));
+  }, [selectedModel]);
+
+  useEffect(() => {
+    if (activeAssistant) {
+      localStorage.setItem('namu_active_assistant', JSON.stringify(activeAssistant));
+    } else {
+      localStorage.removeItem('namu_active_assistant');
+    }
+  }, [activeAssistant]);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const allAssistants = [...defaultAssistants, ...customAssistants];
@@ -332,10 +408,12 @@ export default function App() {
   const isLoggedIn = page === 'home' || page === 'settings';
   const permissions = usePermissions(isLoggedIn);
   const hasAdminAccess = accountRole === 'ADMIN' || permissions.permissionRoles.includes('SOVEREIGN');
+  // Knowledge 화면: featureKey 기반으로 KEEPER·SOVEREIGN 모두 자동 포함됨
+  const hasKnowledgeAccess = accountRole === 'ADMIN' || permissions.allowedApis.some((a) => a.featureKey === 'KNOWLEDGE_REGISTER');
 
   // Redirect to login when token refresh fails across the app
   useEffect(() => {
-    const handler = () => { clear(); setPage('login'); };
+    const handler = () => { clear(); navigateTo('login'); };
     window.addEventListener('auth:expired', handler);
     return () => window.removeEventListener('auth:expired', handler);
   }, [clear]);
@@ -366,7 +444,7 @@ export default function App() {
   }, [isStreaming]);
 
   const handleLogin = (_uid: string) => {
-    setPage('home');
+    navigateTo('home');
     setSessionRefresh((n) => n + 1);
     // 역할 갱신은 isLoggedIn useEffect 가 처리합니다.
   };
@@ -375,7 +453,7 @@ export default function App() {
     await authLogout();
     clear();
     setAccountRole(null);
-    setPage('login');
+    navigateTo('login');
   };
 
   const handleSelectSession = async (session: ChatSessionInfo) => {
@@ -414,11 +492,11 @@ export default function App() {
     }
   };
 
-  if (page === 'login')    return <Login onLogin={handleLogin} onSignup={() => setPage('signup')} />;
-  if (page === 'signup')   return <Signup onSignup={handleLogin} onLogin={() => setPage('login')} />;
+  if (page === 'login')    return <Login onLogin={handleLogin} onSignup={() => navigateTo('signup')} />;
+  if (page === 'signup')   return <Signup onSignup={handleLogin} onLogin={() => navigateTo('login')} />;
   if (page === 'settings') return (
     <Settings
-      onBack={() => setPage('home')}
+      onBack={() => navigateTo('home')}
       accountRole={accountRole}
       permissionRoles={permissions.permissionRoles}
     />
@@ -428,10 +506,28 @@ export default function App() {
   if (page === 'admin-users') {
     if (!hasAdminAccess) {
       // 권한 없이 URL/상태를 직접 조작한 경우 즉시 홈으로 리다이렉트
-      setPage('home');
+      navigateTo('home');
       return null;
     }
-    return <AdminUsersScreen onBack={() => setPage('home')} />;
+    return <AdminUsersScreen onBack={() => navigateTo('home')} />;
+  }
+
+  if (page === 'requests') {
+    if (!hasAdminAccess) {
+      navigateTo('home');
+      return null;
+    }
+    return <RequestsScreen onBack={() => navigateTo('home')} />;
+  }
+
+  // 지식 관리 화면 — KEEPER·SOVEREIGN 또는 ADMIN 계정만 접근 가능
+  // KnowledgeScreen 내부의 React.lazy 로드는 hasKnowledgeAccess 가 true 인 경우에만 실행됩니다.
+  if (page === 'knowledge') {
+    if (!hasKnowledgeAccess) {
+      navigateTo('home');
+      return null;
+    }
+    return <KnowledgeScreen onBack={() => navigateTo('home')} />;
   }
 
   const hasMessages = messages.length > 0;
@@ -457,7 +553,7 @@ export default function App() {
     <div className="flex h-screen font-sans overflow-hidden">
       <div className="hidden md:flex">
         <Sidebar
-          onSettings={() => setPage('settings')}
+          onSettings={() => navigateTo('settings')}
           onNewChat={() => { clear(); setSessionRefresh((n) => n + 1); }}
           onLogout={handleLogout}
           onSelectSession={handleSelectSession}
@@ -467,7 +563,11 @@ export default function App() {
           allowedApis={permissions.allowedApis}
           permissionRoles={permissions.permissionRoles}
           accountRole={accountRole}
-          onFeatureClick={(key) => { if (key === 'ADMIN_USERS') setPage('admin-users'); }}
+          onFeatureClick={(key) => {
+            if (key === 'ADMIN_USERS') navigateTo('admin-users');
+            if (key === 'ADMIN_REQUESTS') navigateTo('requests');
+            if (['KNOWLEDGE_REGISTER', 'KNOWLEDGE_UPDATE', 'KNOWLEDGE_PURGE'].includes(key)) navigateTo('knowledge');
+          }}
           userId={getUserId()}
           onRefreshPermissions={() => permissions.reload()}
           onCreateDefaultRoles={async () => {
@@ -483,7 +583,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex md:hidden">
           <div className="w-64 flex-shrink-0">
             <Sidebar
-              onSettings={() => { setPage('settings'); setMobileMenuOpen(false); }}
+              onSettings={() => { navigateTo('settings'); setMobileMenuOpen(false); }}
               onNewChat={() => { clear(); setSessionRefresh((n) => n + 1); setMobileMenuOpen(false); }}
               onLogout={() => { handleLogout(); setMobileMenuOpen(false); }}
               onSelectSession={handleSelectSession}
@@ -493,7 +593,11 @@ export default function App() {
               allowedApis={permissions.allowedApis}
               permissionRoles={permissions.permissionRoles}
               accountRole={accountRole}
-              onFeatureClick={(key) => { if (key === 'ADMIN_USERS') { setPage('admin-users'); setMobileMenuOpen(false); } }}
+              onFeatureClick={(key) => {
+                if (key === 'ADMIN_USERS') { navigateTo('admin-users'); setMobileMenuOpen(false); }
+                if (key === 'ADMIN_REQUESTS') { navigateTo('requests'); setMobileMenuOpen(false); }
+                if (['KNOWLEDGE_REGISTER', 'KNOWLEDGE_UPDATE', 'KNOWLEDGE_PURGE'].includes(key)) { navigateTo('knowledge'); setMobileMenuOpen(false); }
+              }}
               userId={getUserId()}
               onRefreshPermissions={() => permissions.reload()}
               onCreateDefaultRoles={async () => {
@@ -712,6 +816,7 @@ function ChatInput({
 
           {/* RAG toggle — available for all models */}
           {(
+            
             <button
               onClick={onRagToggle}
               title={ragMode ? 'Knowledge base ON — click to disable' : 'Knowledge base OFF — click to enable'}
@@ -726,21 +831,19 @@ function ChatInput({
             </button>
           )}
 
-          {/* Thinking toggle - only for qwen3:8b */}
-          {selectedModel.name === 'qwen3‑vl:4b' && (
-            <button
-              onClick={onThinkingToggle}
-              title={thinkingMode ? 'Thinking mode ON' : 'Thinking mode OFF'}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                thinkingMode
-                  ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400'
-                  : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              <Brain size={13} />
-              <span className="hidden sm:inline">Thinking</span>
-            </button>
-          )}
+          {/* Thinking toggle */}
+          <button
+            onClick={onThinkingToggle}
+            title={thinkingMode ? 'Thinking mode ON' : 'Thinking mode OFF'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              thinkingMode
+                ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400'
+                : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <Brain size={13} />
+            <span className="hidden sm:inline">Thinking</span>
+          </button>
 
           {isStreaming ? (
             <button
