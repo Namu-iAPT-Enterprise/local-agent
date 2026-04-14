@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Menu, ShieldAlert } from 'lucide-react';
 import CreateAssistantModal from './components/CreateAssistantModal';
 import Sidebar from './components/Sidebar';
@@ -125,6 +125,16 @@ export default function App() {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const allAssistants = [...defaultAssistants, ...customAssistants];
+
+  /** Merge persisted selection with catalog so Lucide icons / prompts stay valid. */
+  const activeAssistantResolved = useMemo(() => {
+    if (!activeAssistant?.id) return null;
+    return allAssistants.find((a) => a.id === activeAssistant.id) ?? null;
+  }, [activeAssistant, allAssistants]);
+
+  const handleClearAssistant = useCallback(() => {
+    setActiveAssistant(null);
+  }, []);
 
   const isLoggedIn = page !== 'login' && page !== 'signup';
   const permissions = usePermissions(isLoggedIn);
@@ -267,8 +277,8 @@ export default function App() {
     if ((!text && pendingAttachments.length === 0) || isStreaming) return;
     setInput('');
 
-    const messageToSend = activeAssistant
-      ? `${activeAssistant.systemPrompt}\n\n${text}`
+    const messageToSend = activeAssistantResolved
+      ? `${activeAssistantResolved.systemPrompt}\n\n${text}`
       : text;
 
     send(
@@ -347,6 +357,14 @@ export default function App() {
     onStop: stop,
     onKeyDown: handleKeyDown,
     placeholder: tr.inputPlaceholder,
+    activeAssistant: activeAssistantResolved
+      ? {
+          id: activeAssistantResolved.id,
+          name: activeAssistantResolved.name,
+          Icon: activeAssistantResolved.icon,
+        }
+      : null,
+    onClearAssistant: handleClearAssistant,
   };
 
   return (
@@ -459,7 +477,6 @@ export default function App() {
               activeAssistantId={activeAssistant?.id ?? null}
               onSelectAssistant={(assistant) => {
                 setActiveAssistant(assistant);
-                setInput(assistant.promptPrefix);
                 setTimeout(() => textareaRef.current?.focus(), 0);
               }}
               onCreateAssistant={() => setShowCreateModal(true)}

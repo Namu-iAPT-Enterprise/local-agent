@@ -12,18 +12,6 @@ interface SavedModelRecord {
   modelName: string;
 }
 
-function PlatformDot({ platform }: { platform: string }) {
-  const colors: Record<string, string> = {
-    Ollama:     'bg-gray-500',
-    OpenRouter: 'bg-indigo-500',
-    OpenAI:     'bg-green-500',
-    Anthropic:  'bg-orange-500',
-    Gemini:     'bg-blue-500',
-    Custom:     'bg-gray-400',
-  };
-  return <span className={`w-2 h-2 rounded-full flex-shrink-0 ${colors[platform] ?? 'bg-gray-400'}`} />;
-}
-
 interface ModelSelectorProps {
   selected: ModelOption;
   onChange: (m: ModelOption) => void;
@@ -67,9 +55,8 @@ export function ModelSelector({ selected, onChange }: ModelSelectorProps) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors font-medium"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-600 text-xs text-neutral-700 dark:text-neutral-200 bg-neutral-100/90 dark:bg-neutral-900/80 hover:bg-neutral-200/90 dark:hover:bg-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-500 active:bg-neutral-200 dark:active:bg-neutral-800 transition-colors font-medium"
       >
-        <PlatformDot platform={selected.platform} />
         <span className="max-w-[120px] truncate">{selected.name}</span>
         <ChevronDown size={11} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -86,7 +73,6 @@ export function ModelSelector({ selected, onChange }: ModelSelectorProps) {
               onClick={() => pick(m)}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
-              <PlatformDot platform={m.platform} />
               <span className="flex-1 text-gray-700 dark:text-gray-200 truncate">{m.name}</span>
               <span className="text-[10px] text-gray-400">{m.platform}</span>
               {selected.id === m.id && <Check size={13} className="text-blue-500 flex-shrink-0" />}
@@ -106,7 +92,6 @@ export function ModelSelector({ selected, onChange }: ModelSelectorProps) {
                   onClick={() => pick(m)}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
-                  <PlatformDot platform={m.platform} />
                   <span className="flex-1 text-gray-700 dark:text-gray-200 truncate">{m.name}</span>
                   <span className="text-[10px] text-gray-400">{m.platform}</span>
                   {selected.id === m.id && <Check size={13} className="text-blue-500 flex-shrink-0" />}

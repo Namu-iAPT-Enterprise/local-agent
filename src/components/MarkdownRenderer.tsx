@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Copy, Check, Play } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 import type { Components } from 'react-markdown';
 
 // ── Language display name ──────────────────────────────────────────────────
@@ -44,7 +44,7 @@ function CodeBlock({
   const label = filename || LANG_LABELS[language?.toLowerCase()] || (language ? language.charAt(0).toUpperCase() + language.slice(1) : 'Code');
 
   return (
-    <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 my-3 text-sm bg-white dark:bg-gray-900">
+    <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 my-4 text-sm bg-white dark:bg-gray-900 shadow-sm">
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
@@ -57,38 +57,35 @@ function CodeBlock({
         </div>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={handleCopy}
             title={copied ? 'Copied!' : 'Copy code'}
             className="p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             {copied ? <Check size={14} /> : <Copy size={14} />}
           </button>
-          <button
-            title="Run"
-            className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-          >
-            <Play size={12} className="fill-current" />
-            Run
-          </button>
         </div>
       </div>
 
       {/* Syntax-highlighted body */}
-      <SyntaxHighlighter
-        language={language || 'text'}
-        style={isDark ? oneDark : oneLight}
-        customStyle={{
-          margin: 0,
-          borderRadius: 0,
-          fontSize: '0.82rem',
-          background: 'transparent',
-          padding: '1.1rem 1.25rem',
-        }}
-        showLineNumbers={false}
-        wrapLongLines={false}
-      >
-        {code}
-      </SyntaxHighlighter>
+      <div className="overflow-x-auto">
+        <SyntaxHighlighter
+          language={language || 'text'}
+          style={isDark ? oneDark : oneLight}
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            fontSize: '0.82rem',
+            background: 'transparent',
+            padding: '1.1rem 1.25rem',
+            minWidth: 'min(100%, max-content)',
+          }}
+          showLineNumbers={false}
+          wrapLongLines={false}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
     </div>
   );
 }
@@ -96,6 +93,47 @@ function CodeBlock({
 // ── Normalize inline markdown ───────────────────────────────────────────────
 // Models sometimes stream headings/lists without leading newlines.
 // ReactMarkdown requires block elements to start on their own line.
+
+/**
+ * Common model bug: opening fence glued to code — ```pythonprint("hi") instead of
+ * ```python\nprint("hi"). Without a newline, parsers treat the block as inline code.
+ * Longest language id first so "python" does not steal from "python3".
+ */
+const FENCE_LANG_ALIASES = [
+  'typescript', 'javascript', 'python3', 'python', 'markdown', 'plaintext', 'bash',
+  'dockerfile', 'graphql', 'kotlin', 'scala', 'swift', 'csharp', 'ruby', 'rust',
+  'java', 'html', 'htm', 'css', 'scss', 'sass', 'less', 'json', 'jsonc',
+  'yaml', 'yml', 'toml', 'xml', 'sql', 'mysql', 'pgsql', 'sqlite', 'go', 'golang',
+  'cpp', 'php', 'perl', 'dart', 'elixir', 'haskell', 'lua', 'vim', 'diff',
+  'docker', 'nginx', 'ini', 'r', 'vue', 'svelte', 'mdx', 'tsx', 'jsx', 'ts', 'js',
+  'py', 'rb', 'rs', 'kt', 'sh', 'zsh', 'shell', 'c', 'text', 'txt', 'http',
+].sort((a, b) => b.length - a.length);
+
+function fixGluedFenceOpen(text: string): string {
+  let s = text;
+  for (const lang of FENCE_LANG_ALIASES) {
+    const esc = lang.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('```' + esc + '(?=\\S)', 'gi');
+    s = s.replace(re, () => '```' + lang.toLowerCase() + '\n');
+  }
+  return s;
+}
+
+/** If triple-backtick count is odd, append a closing fence so the last block parses. */
+function ensureClosedFence(text: string): string {
+  const ticks = text.match(/```/g);
+  const n = ticks?.length ?? 0;
+  if (n % 2 === 1) {
+    return text.endsWith('\n') ? `${text}\`\`\`` : `${text}\n\`\`\``;
+  }
+  return text;
+}
+
+function fixFencedCodeGlitches(text: string): string {
+  let s = fixGluedFenceOpen(text);
+  s = ensureClosedFence(s);
+  return s;
+}
 
 // ── Fix unfenced code that models output without backticks ──────────────────
 // e.g. model writes: "...here's the code: html<!DOCTYPE html>..."
@@ -132,9 +170,75 @@ function fixUnfencedCode(text: string): string {
   return result;
 }
 
-function normalizeMarkdown(raw: string): string {
-  let result = fixUnfencedCode(raw);
+/** Apply a string transform only outside ``` fenced code blocks. */
+function applyOutsideCodeFences(text: string, fn: (chunk: string) => string): string {
+  const fence = /```[\s\S]*?```/g;
+  let last = 0;
+  let out = '';
+  let m: RegExpExecArray | null;
+  while ((m = fence.exec(text)) !== null) {
+    out += fn(text.slice(last, m.index));
+    out += m[0];
+    last = m.index + m[0].length;
+  }
+  out += fn(text.slice(last));
+  return out;
+}
 
+/**
+ * GFM tables need each row on its own line. Models often emit "||" between rows with no newline,
+ * or glue "intro text:| # | header..." without a line break before the table.
+ */
+function fixMarkdownTables(text: string): string {
+  return applyOutsideCodeFences(text, (s) => {
+    let t = s;
+    // "…format:| # | Word |" → blank line before table
+    t = t.replace(/:\s*\|\s*#\s*\|/g, ':\n\n| # |');
+    // "| … || :--- |" or "| … || 1 | …" → row break (double pipe → pipe + newline + pipe)
+    t = t.replace(/\|\|\s*(?=\s*(?::\s*-|\d+\s*\|))/g, '|\n|');
+    return t;
+  });
+}
+
+/**
+ * Fixes common model outputs that break GFM parsing: missing newlines before lists,
+ * numbered vocabulary rows glued to intro text, Definition/Example bullets on one line.
+ */
+function fixChatMarkdownLayout(text: string): string {
+  let s = text;
+
+  // Intro text ending with ":" immediately followed by "1. **..."  →  add blank line
+  s = s.replace(/:\s*(\d+\.\s+\*\*)/g, ':\n\n$1');
+
+  // Same if a closing paren/bracket before ":1." (rare)
+  s = s.replace(/\)\s*:\s*(\d+\.\s+\*\*)/g, '):\n\n$1');
+
+  // "1. **Word**    *   **Definition:**" or "1. **Word** * **Definition:**"
+  s = s.replace(/(\d+\.\s+\*\*[^*]+\*\*)\s+\*\s+/g, '$1\n   * ');
+
+  // Second bullet *Example* still on same line as Definition paragraph
+  s = s.replace(
+    /(\*\*Definition:\*\*[^\n]*?)\s+\*\s+\*Example:/g,
+    '$1\n   * *Example:',
+  );
+
+  // Fallback: "*   *Example:*" after content on same line (sentence end or inline)
+  s = s.replace(/([^\n])\s+\*\s+\*Example:/g, '$1\n   * *Example:');
+  // After ". ! ?" before "* *Example:*" (vocabulary template)
+  s = s.replace(/([.!?])\s+\*\s+\*Example:/g, '$1\n   * *Example:');
+
+  // Next numbered entry stuck after previous block: "**...price." 2. **Discount**"
+  s = s.replace(/(\*\*[^*]+\*\*)\s+(\d+\.\s+\*\*)/g, '$1\n\n$2');
+
+  return s;
+}
+
+function normalizeMarkdown(raw: string): string {
+  let result = fixFencedCodeGlitches(raw);
+  result = fixUnfencedCode(result);
+  result = fixMarkdownTables(result);
+  result = fixChatMarkdownLayout(result);
+  result = ensureClosedFence(result);
   return result;
 }
 
@@ -148,47 +252,80 @@ export default function MarkdownRenderer({ content }: Props) {
   const components: Components = {
     // ── Headings ──
     h1: ({ children }) => (
-      <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-6 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
+      <h1 className="text-[1.35rem] font-bold tracking-tight text-gray-900 dark:text-white mt-6 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700 first:mt-0">
         {children}
       </h1>
     ),
     h2: ({ children }) => (
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mt-5 mb-2.5 pb-1 border-b border-gray-100 dark:border-gray-800">
+      <h2 className="text-[1.2rem] font-semibold tracking-tight text-gray-900 dark:text-white mt-6 mb-2.5 pb-1.5 border-b border-gray-100 dark:border-gray-800 first:mt-0">
         {children}
       </h2>
     ),
     h3: ({ children }) => (
-      <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100 mt-4 mb-2">
+      <h3 className="text-[1.05rem] font-semibold text-gray-900 dark:text-gray-100 mt-5 mb-2 first:mt-0">
         {children}
       </h3>
     ),
     h4: ({ children }) => (
-      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mt-3 mb-1.5">
+      <h4 className="text-[0.95rem] font-semibold text-gray-800 dark:text-gray-200 mt-4 mb-1.5 first:mt-0">
         {children}
       </h4>
+    ),
+    h5: ({ children }) => (
+      <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1 first:mt-0">
+        {children}
+      </h5>
+    ),
+    h6: ({ children }) => (
+      <h6 className="text-sm font-medium text-gray-600 dark:text-gray-400 mt-3 mb-1 first:mt-0 uppercase tracking-wide">
+        {children}
+      </h6>
     ),
 
     // ── Paragraph ──
     p: ({ children }) => (
-      <p className="text-gray-800 dark:text-gray-100 leading-7 mb-4 last:mb-0">{children}</p>
+      <p className="text-gray-800 dark:text-gray-100 leading-[1.65] mb-3.5 last:mb-0 text-left">
+        {children}
+      </p>
     ),
 
-    // ── Lists ──
-    ul: ({ children }) => (
-      <ul className="list-disc list-outside ml-6 mb-4 space-y-1.5 text-gray-800 dark:text-gray-100">
+    // ── Lists (remark-gfm: task lists add .contains-task-list / .task-list-item) ──
+    ul: ({ children, className, ...props }) => (
+      <ul
+        className={`mb-4 text-gray-800 dark:text-gray-100 last:mb-0 ${
+          typeof className === 'string' && className.includes('contains-task-list')
+            ? 'list-none pl-0 ml-0 space-y-2'
+            : 'list-disc list-outside pl-6 marker:text-gray-400 dark:marker:text-gray-500 space-y-1'
+        } ${className || ''}`}
+        {...props}
+      >
         {children}
       </ul>
     ),
-    ol: ({ children }) => (
-      <ol className="list-decimal list-outside ml-6 mb-4 space-y-1.5 text-gray-800 dark:text-gray-100">
+    ol: ({ children, className, ...props }) => (
+      <ol
+        className={`list-decimal list-outside pl-6 mb-4 last:mb-0 space-y-1 text-gray-800 dark:text-gray-100 marker:text-gray-500 dark:marker:text-gray-400 ${className || ''}`}
+        {...props}
+      >
         {children}
       </ol>
     ),
-    li: ({ children }) => <li className="leading-7 pl-1">{children}</li>,
+    li: ({ children, className, ...props }) => (
+      <li
+        className={`leading-[1.65] pl-0.5 ${
+          typeof className === 'string' && className.includes('task-list-item')
+            ? 'flex flex-row gap-2.5 items-start list-none [&>p]:inline [&>p]:m-0 [&>p]:leading-[1.65]'
+            : ''
+        } ${className || ''}`}
+        {...props}
+      >
+        {children}
+      </li>
+    ),
 
     // ── Blockquote ──
     blockquote: ({ children }) => (
-      <blockquote className="border-l-4 border-blue-400 pl-4 py-0.5 my-4 bg-blue-50 dark:bg-blue-950/20 rounded-r-lg text-gray-700 dark:text-gray-300 italic">
+      <blockquote className="border-l-[3px] border-blue-500/70 dark:border-blue-400/60 pl-4 pr-2 py-2 my-4 bg-blue-50/60 dark:bg-blue-950/25 rounded-r-md text-gray-700 dark:text-gray-300 italic [&_p]:mb-2 [&_p:last-child]:mb-0">
         {children}
       </blockquote>
     ),
@@ -210,10 +347,14 @@ export default function MarkdownRenderer({ content }: Props) {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-blue-500 underline underline-offset-2 hover:text-blue-600 dark:hover:text-blue-400"
+        className="text-blue-600 dark:text-blue-400 underline underline-offset-[3px] decoration-blue-600/40 dark:decoration-blue-400/40 hover:decoration-blue-600 dark:hover:decoration-blue-400 break-words [overflow-wrap:anywhere]"
       >
         {children}
       </a>
+    ),
+
+    del: ({ children }) => (
+      <del className="line-through text-gray-500 dark:text-gray-500 opacity-90">{children}</del>
     ),
 
     // ── Images ──
@@ -235,19 +376,19 @@ export default function MarkdownRenderer({ content }: Props) {
 
     // ── Table ──
     table: ({ children }) => (
-      <div className="overflow-x-auto my-3 rounded-xl border border-gray-200 dark:border-gray-700">
-        <table className="w-full text-sm border-collapse">{children}</table>
+      <div className="overflow-x-auto my-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950/40 shadow-sm">
+        <table className="w-full min-w-[16rem] text-sm border-collapse">{children}</table>
       </div>
     ),
     thead: ({ children }) => (
-      <thead className="bg-gray-100 dark:bg-gray-800">{children}</thead>
+      <thead className="bg-gray-50 dark:bg-gray-900/80 border-b border-gray-200 dark:border-gray-700">{children}</thead>
     ),
     tbody: ({ children }) => (
       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">{children}</tbody>
     ),
-    tr: ({ children }) => <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50">{children}</tr>,
+    tr: ({ children }) => <tr className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">{children}</tr>,
     th: ({ children }) => (
-      <th className="px-4 py-2.5 text-left font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+      <th className="px-3 sm:px-4 py-2.5 text-left font-semibold text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0 align-top whitespace-nowrap">
         {typeof children === 'string' && children.includes('<br') 
           ? children.split(/<br\s*\/?>/gi).map((part, idx, arr) => (
               <React.Fragment key={idx}>
@@ -259,7 +400,7 @@ export default function MarkdownRenderer({ content }: Props) {
       </th>
     ),
     td: ({ children }) => (
-      <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300 align-top">
+      <td className="px-3 sm:px-4 py-2.5 text-gray-700 dark:text-gray-300 align-top border-r border-gray-100 dark:border-gray-800 last:border-r-0">
         {typeof children === 'string' && children.includes('<br') 
           ? children.split(/<br\s*\/?>/gi).map((part, idx, arr) => (
               <React.Fragment key={idx}>
@@ -279,7 +420,7 @@ export default function MarkdownRenderer({ content }: Props) {
       if (!match) {
         return (
           <code
-            className="px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-pink-600 dark:text-pink-400 font-mono text-[0.8em]"
+            className="px-1.5 py-px rounded-md bg-gray-100 dark:bg-gray-800/90 text-rose-700 dark:text-rose-300 font-mono text-[0.88em] align-baseline border border-gray-200/80 dark:border-gray-600/50"
             {...props}
           >
             {children}
@@ -303,7 +444,7 @@ export default function MarkdownRenderer({ content }: Props) {
   };
 
   return (
-    <div className="markdown-body text-[0.9rem] leading-7 text-gray-800 dark:text-gray-100">
+    <div className="markdown-body min-w-0 max-w-full text-[15px] leading-[1.65] text-gray-800 dark:text-gray-100 text-left antialiased [&_p]:text-pretty [&_li]:text-pretty">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {normalizeMarkdown(content)}
       </ReactMarkdown>

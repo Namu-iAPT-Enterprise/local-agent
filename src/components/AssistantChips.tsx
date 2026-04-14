@@ -55,10 +55,8 @@ export default function AssistantChips({
             className="
               flex items-center gap-1.5 px-3 py-2 rounded-full
               text-sm font-medium whitespace-nowrap
-              border-2 border-dashed border-gray-300 dark:border-gray-600
-              text-gray-500 dark:text-gray-400
-              hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400
-              hover:bg-blue-50 dark:hover:bg-blue-950/30
+              bg-black text-white hover:bg-neutral-900
+              dark:bg-black dark:text-white dark:hover:bg-neutral-900
               transition-all duration-200
             "
           >

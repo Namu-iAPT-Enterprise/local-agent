@@ -5,6 +5,39 @@
 .markdown-body > *:first-child { margin-top: 0 !important; }
 .markdown-body > *:last-child  { margin-bottom: 0 !important; }
 
+/* Nested lists — spacing without breaking task lists */
+.markdown-body ul ul,
+.markdown-body ul ol,
+.markdown-body ol ul,
+.markdown-body ol ol {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+.markdown-body .contains-task-list .contains-task-list {
+  margin-top: 0.35rem;
+}
+.markdown-body .task-list-item input[type="checkbox"] {
+  margin-top: 0.28rem;
+  flex-shrink: 0;
+  accent-color: rgb(37 99 235);
+}
+.dark .markdown-body .task-list-item input[type="checkbox"] {
+  accent-color: rgb(96 165 250);
+}
+
+/* Ordered list + nested bullets (e.g. vocabulary: 1. term → Definition / Example) */
+.markdown-body ol > li > p {
+  margin-bottom: 0.35rem;
+}
+.markdown-body ol > li > p:last-child {
+  margin-bottom: 0;
+}
+.markdown-body ol > li > ul,
+.markdown-body ol > li > ol {
+  margin-top: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
 /* Hide scrollbar while keeping scroll behaviour */
 .hide-scrollbar { scrollbar-width: none; }
 .hide-scrollbar::-webkit-scrollbar { display: none; }

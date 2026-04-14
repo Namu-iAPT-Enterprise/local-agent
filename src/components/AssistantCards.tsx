@@ -31,7 +31,7 @@ export default function AssistantCards({
         </h2>
         <button
           onClick={onCreateAssistant}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-black hover:bg-neutral-900 text-white text-sm font-medium transition-colors dark:bg-black dark:hover:bg-neutral-900"
         >
           <Plus size={18} />
           <span>새 어시스턴트</span>
@@ -47,11 +47,13 @@ export default function AssistantCards({
           return (
             <button
               key={assistant.id}
+              type="button"
+              aria-label={`${assistant.name}. ${assistant.description}`}
               onClick={() => onSelectAssistant(assistant)}
               className={`
                 relative text-left p-4 rounded-2xl transition-all duration-200
                 ${isActive 
-                  ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400' 
+                  ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-transparent' 
                   : 'bg-slate-50 dark:bg-gray-800/50 border-2 border-transparent hover:bg-slate-100 dark:hover:bg-gray-800'
                 }
               `}
@@ -72,15 +74,10 @@ export default function AssistantCards({
                 </div>
               </div>
 
-              {/* Title */}
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+              {/* Title only — description / system prompt hidden in UI */}
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white text-left">
                 {assistant.name}
               </h3>
-
-              {/* Description */}
-              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">
-                {assistant.description}
-              </p>
             </button>
           );
         })}
