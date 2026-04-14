@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Copy, Check } from 'lucide-react';
 import type { Components } from 'react-markdown';
+import type { Element as HastElement, Text as HastText } from 'hast';
 
 // ── Language display name ──────────────────────────────────────────────────
 
@@ -13,13 +14,58 @@ const LANG_LABELS: Record<string, string> = {
   ts: 'TypeScript', typescript: 'TypeScript',
   tsx: 'TypeScript', jsx: 'JavaScript',
   py: 'Python', python: 'Python',
-  html: 'HTML', css: 'CSS',
+  html: 'HTML', htm: 'HTML', css: 'CSS',
   json: 'JSON', yaml: 'YAML', yml: 'YAML',
   sh: 'Shell', bash: 'Bash', zsh: 'Shell',
   sql: 'SQL', go: 'Go', rust: 'Rust',
   java: 'Java', cpp: 'C++', c: 'C',
   rb: 'Ruby', ruby: 'Ruby', php: 'PHP',
 };
+
+/** Prism + label: map streaming / alias ids to real languages */
+function normalizeFenceLanguageId(lang: string): string {
+  const l = lang.toLowerCase().trim();
+  if (l === 'htm') return 'html';
+  return l;
+}
+
+/** HAST has the true source text; `String(children)` breaks when children is an array (commas, lost newlines). */
+function hastElementToPlainText(hast: HastElement | undefined): string | null {
+  if (!hast?.children?.length) return null;
+  let out = '';
+  const walk = (nodes: HastElement['children']) => {
+    for (const n of nodes) {
+      if (n.type === 'text') out += (n as HastText).value;
+      else if (n.type === 'element') walk((n as HastElement).children);
+    }
+  };
+  walk(hast.children);
+  return out.length > 0 ? out : null;
+}
+
+function flattenReactCodeChildren(node: React.ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(flattenReactCodeChildren).join('');
+  if (React.isValidElement(node)) {
+    const ch = (node.props as { children?: React.ReactNode }).children;
+    if (ch !== undefined) return flattenReactCodeChildren(ch);
+  }
+  return '';
+}
+
+function extractFenceCodeText(children: React.ReactNode, node: HastElement | undefined): string {
+  const fromHast = hastElementToPlainText(node);
+  const raw = fromHast ?? flattenReactCodeChildren(children);
+  return raw.replace(/\n$/, '');
+}
+
+/** Models sometimes split `html` so the first "line" is just `l` before `<!DOCTYPE`. */
+function stripHtmlFenceLeadingArtifact(code: string): string {
+  let s = code.replace(/^l\s*\r?\n(?=<!DOCTYPE\b)/i, '');
+  s = s.replace(/^l(?=<!DOCTYPE\b)/i, '');
+  return s;
+}
 
 // ── Fenced code block ──────────────────────────────────────────────────────
 
@@ -35,55 +81,73 @@ function CodeBlock({
   const [copied, setCopied] = useState(false);
   const isDark = document.documentElement.classList.contains('dark');
 
+  const langKey = normalizeFenceLanguageId(language || 'text');
+  const label =
+    filename || LANG_LABELS[langKey] || (language ? language.charAt(0).toUpperCase() + language.slice(1) : 'Code');
+
+  const displayCode = stripHtmlFenceLeadingArtifact(code);
+
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(code);
+    await navigator.clipboard.writeText(displayCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const label = filename || LANG_LABELS[language?.toLowerCase()] || (language ? language.charAt(0).toUpperCase() + language.slice(1) : 'Code');
-
   return (
-    <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 my-4 text-sm bg-white dark:bg-gray-900 shadow-sm">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-          {/* </> icon */}
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <div className="box-border w-full max-w-full min-w-0 rounded-xl border border-gray-200 dark:border-gray-700 my-4 text-sm bg-white dark:bg-gray-900 shadow-sm [contain:inline-size]">
+      {/* Header: flex + shrink-0 copy — wide <pre> must not expand the chat column (see min-w-0 on parents) */}
+      <div className="flex min-w-0 items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800 sm:px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <svg
+            className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
             <polyline points="16 18 22 12 16 6" />
             <polyline points="8 6 2 12 8 18" />
           </svg>
-          <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{label}</span>
+          <span className="min-w-0 truncate text-xs font-medium text-gray-600 dark:text-gray-300">{label}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={handleCopy}
-            title={copied ? 'Copied!' : 'Copy code'}
-            className="p-1.5 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-          >
-            {copied ? <Check size={14} /> : <Copy size={14} />}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          title={copied ? 'Copied!' : 'Copy code'}
+          aria-label={copied ? 'Copied' : 'Copy code'}
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600"
+        >
+          {copied ? <Check size={16} strokeWidth={2.5} /> : <Copy size={16} strokeWidth={2.5} />}
+        </button>
       </div>
 
-      {/* Syntax-highlighted body */}
-      <div className="overflow-x-auto">
+      {/* Scroll wide lines inside the bubble only — does not widen the flex column */}
+      <div className="max-w-full min-w-0 overflow-x-auto">
         <SyntaxHighlighter
-          language={language || 'text'}
+          language={langKey || 'text'}
           style={isDark ? oneDark : oneLight}
+          PreTag="div"
           customStyle={{
             margin: 0,
             borderRadius: 0,
             fontSize: '0.82rem',
             background: 'transparent',
             padding: '1.1rem 1.25rem',
-            minWidth: 'min(100%, max-content)',
+            minWidth: 0,
+            maxWidth: '100%',
+            width: '100%',
+            boxSizing: 'border-box',
+            whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
           }}
           showLineNumbers={false}
-          wrapLongLines={false}
+          wrapLongLines
         >
-          {code}
+          {displayCode}
         </SyntaxHighlighter>
       </div>
     </div>
@@ -499,22 +563,24 @@ export default function MarkdownRenderer({ content }: Props) {
     ),
 
     // ── Code: inline vs block ──
-    code: ({ className, children, ...props }) => {
+    code: ({ className, children, node, ...props }) => {
       const match = /language-(\S+)/.exec(className || '');
+      const hastCode = node as HastElement | undefined;
 
       // Inline code (no language class, no newlines)
       if (!match) {
+        const inlineText = hastElementToPlainText(hastCode) ?? flattenReactCodeChildren(children);
         return (
           <code
             className="px-1.5 py-px rounded-md bg-gray-100 dark:bg-gray-800/90 text-rose-700 dark:text-rose-300 font-mono text-[0.88em] align-baseline border border-gray-200/80 dark:border-gray-600/50"
             {...props}
           >
-            {children}
+            {inlineText}
           </code>
         );
       }
 
-      const raw = String(children).trimEnd();
+      const raw = extractFenceCodeText(children, hastCode);
       const langMeta = match[1]; // e.g. "python" or "python:filename.py"
       const [language, filename] = langMeta.includes(':')
         ? langMeta.split(':')

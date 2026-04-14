@@ -44,7 +44,10 @@ export function ChatMessageList({
   return (
     <>
       {messages.map((msg, i) => (
-        <div key={i} className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+        <div
+          key={i}
+          className={`group flex min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+        >
           {msg.role === 'assistant' && (
             <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold mr-2 mt-0.5 flex-shrink-0">
               N
@@ -68,11 +71,11 @@ export function ChatMessageList({
               />
             </div>
           ) : (
-            <div className="flex flex-col w-full">
-              <div className={`rounded-2xl text-sm ${
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className={`min-w-0 rounded-2xl text-sm ${
                 msg.error
                   ? 'max-w-[75%] px-4 py-2.5 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-bl-sm whitespace-pre-wrap leading-relaxed'
-                  : 'w-full'
+                  : 'w-full max-w-full'
               }`}>
                 {!msg.error ? (() => {
                   const isLast = i === messages.length - 1;
