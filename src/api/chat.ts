@@ -14,6 +14,8 @@ export interface SendMessageRequest {
   apiKey?: string;
   baseUrl?: string;
   useRag?: boolean;
+  /** Base64 image payloads (no data-URL prefix); Ollama vision via main-server only. */
+  images?: string[];
 }
 
 export interface SendMessageResponse {

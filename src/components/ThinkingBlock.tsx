@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Brain } from 'lucide-react';
 
 interface ThinkingBlockProps {
@@ -7,15 +7,14 @@ interface ThinkingBlockProps {
 }
 
 export default function ThinkingBlock({ thinking, isStreaming }: ThinkingBlockProps) {
-  // Auto-open while streaming, auto-collapse when done
-  const [open, setOpen] = useState(true);
-  useEffect(() => {
-    if (!isStreaming) setOpen(false);
-  }, [isStreaming]);
+  /** Thinking text is hidden until the user expands this row (never auto-open). */
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="mb-3">
       <button
+        type="button"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors group"
       >

@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+/** Electron/Chromium may expose the real path on disk (used for basename when `name` is empty). */
+interface File {
+  path?: string;
+}
+
 interface ImportMetaEnv {
   /**
    * Public API base (gateway or main-server). Paths: `/api/chat/*`, `/rag/*`, etc.

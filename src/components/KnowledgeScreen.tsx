@@ -1,13 +1,11 @@
-import React, { Suspense } from 'react';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import React from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import Knowledge from '../pages/settings/Knowledge';
 
-// ── 코드 스플리팅 (lazy import) ────────────────────────────────────────────────
-//
-// Knowledge 컴포넌트는 이 화면이 실제로 렌더링될 때만 번들이 로드됩니다.
-// App.tsx 에서 hasKnowledgeAccess 조건이 false 이면 이 컴포넌트 자체가 렌더링되지 않으므로
-// 권한 없는 클라이언트에는 Knowledge 코드가 전달되지 않습니다.
-const Knowledge = React.lazy(() => import('../pages/settings/Knowledge'));
+// Eager import: `React.lazy` + Vite HMR on this file often forces repeated full page reloads
+// while editing. App.tsx still skips this screen when `hasKnowledgeAccess` is false, so
+// unauthorized users never load this module.
 
 interface KnowledgeScreenProps {
   onBack: () => void;
@@ -43,15 +41,7 @@ export default function KnowledgeScreen({ onBack }: KnowledgeScreenProps) {
       {/* 본문 */}
       <main className="relative z-10 flex-1 overflow-y-auto flex justify-center px-10 py-8">
         <div className="w-full max-w-2xl">
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center h-40 text-gray-400">
-                <Loader2 size={24} className="animate-spin" />
-              </div>
-            }
-          >
-            <Knowledge />
-          </Suspense>
+          <Knowledge />
         </div>
       </main>
     </div>

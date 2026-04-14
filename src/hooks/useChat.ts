@@ -22,6 +22,29 @@ export interface AssistantVariant {
   thinking?: string;
 }
 
+/** Pending row in the composer before send (images hold base64 for Ollama vision). */
+export interface PendingChatAttachment {
+  id: string;
+  kind: 'image' | 'file';
+  name: string;
+  /** While reading file bytes — UI shows skeleton; send is disabled. */
+  status?: 'loading' | 'ready';
+  /** `URL.createObjectURL` — revoke after send or remove */
+  previewUrl?: string;
+  /** Raw base64 (no data-URL prefix) for `images` on POST */
+  base64?: string;
+  /** UTF-8 text for small text files */
+  text?: string;
+}
+
+/** Shown on sent user bubbles (no base64). */
+export interface UserAttachmentDisplay {
+  id: string;
+  kind: 'image' | 'file';
+  name: string;
+  previewUrl?: string;
+}
+
 export interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -33,6 +56,137 @@ export interface Message {
   variants?: AssistantVariant[];
   /** Index into variants[] that is currently displayed. */
   activeVariantIdx?: number;
+  /** Images / file chips for user messages */
+  attachments?: UserAttachmentDisplay[];
+}
+
+const MAX_VISION_IMAGES = 6;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_TEXT_FILE_BYTES = 400 * 1024;
+
+/** macOS / Electron often leave `file.type` empty; use extension so images aren't misread as text (400KB cap). */
+const IMAGE_NAME_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|heic|heif|avif|tiff?)$/i;
+
+/**
+ * Electron sets {@code File.path} (absolute path) while {@code file.name} can be empty or unhelpful.
+ * Always derive a display basename for extension checks and UI labels.
+ */
+export function getFileBasename(file: File): string {
+  if (file.path && typeof file.path === 'string') {
+    const seg = file.path.split(/[/\\]/).filter(Boolean);
+    if (seg.length) return seg[seg.length - 1]!;
+  }
+  return file.name || 'file';
+}
+
+export function isProbablyImageFile(file: File): boolean {
+  if (file.type.startsWith('image/')) return true;
+  return IMAGE_NAME_EXT.test(getFileBasename(file));
+}
+
+export { MAX_IMAGE_BYTES, MAX_TEXT_FILE_BYTES, MAX_VISION_IMAGES };
+
+function fileBlock(name: string, body: string): string {
+  return `\n\n--- file: ${name} ---\n${body}`;
+}
+
+/** Strip appended file blocks for the edit box (full `content` is still stored for the API). */
+export function stripFileBlocksForEdit(content: string): string {
+  return content.replace(/\n\n--- file:[^\n]+---\n[\s\S]*?(?=\n\n--- file:|$)/g, '').trim();
+}
+
+function revokeAttachmentUrls(msgs: Message[]) {
+  for (const m of msgs) {
+    m.attachments?.forEach((a) => {
+      if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+    });
+  }
+}
+
+function buildOutgoing(
+  caption: string,
+  pending: PendingChatAttachment[] | undefined,
+  model: ModelOption,
+): { message: string; images?: string[] } {
+  const cap = caption.trim();
+  const parts: string[] = [];
+  if (cap) parts.push(cap);
+  for (const p of pending ?? []) {
+    if (p.status === 'loading') continue;
+    if (p.kind === 'file' && p.text) parts.push(fileBlock(p.name, p.text));
+  }
+  let message = parts.join('');
+  const imageB64: string[] = [];
+  if (model.isLocal) {
+    for (const p of pending ?? []) {
+      if (p.status === 'loading') continue;
+      if (p.kind === 'image' && p.base64) imageB64.push(p.base64);
+    }
+  }
+  const visionImages = model.isLocal ? imageB64.slice(0, MAX_VISION_IMAGES) : [];
+  if (!model.isLocal && pending?.some((p) => p.kind === 'image' && p.status !== 'loading')) {
+    const n = pending.filter((p) => p.kind === 'image' && p.status !== 'loading').length;
+    message += `\n\n[${n} image(s) were attached — use a local vision model (e.g. qwen3-vl) to analyze images.]`;
+  }
+  if (!message.trim() && visionImages.length) message = '(see attached image(s))';
+  return {
+    message: message.trim(),
+    images: visionImages.length ? visionImages : undefined,
+  };
+}
+
+/** Read one file into a pending attachment (caller supplies stable `id` for loading placeholders). */
+export async function readSingleFileAsAttachment(
+  file: File,
+  id: string,
+): Promise<{ attachment: PendingChatAttachment } | { error: string }> {
+  if (isProbablyImageFile(file)) {
+    if (file.size > MAX_IMAGE_BYTES) {
+      return { error: `${getFileBasename(file)}: image too large (max ${MAX_IMAGE_BYTES / 1024 / 1024}MB)` };
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+    const comma = dataUrl.indexOf(',');
+    const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+    const displayName = getFileBasename(file);
+    return {
+      attachment: {
+        id,
+        kind: 'image',
+        name: displayName,
+        status: 'ready',
+        previewUrl: URL.createObjectURL(file),
+        base64,
+      },
+    };
+  }
+  const displayName = getFileBasename(file);
+  if (file.size > MAX_TEXT_FILE_BYTES) {
+    return { error: `${displayName}: file too large (max ${MAX_TEXT_FILE_BYTES / 1024}KB)` };
+  }
+  try {
+    const text = await file.text();
+    return { attachment: { id, kind: 'file', name: displayName, status: 'ready', text } };
+  } catch {
+    return { error: `${displayName}: could not read as text` };
+  }
+}
+
+/** Read browser File list into pending attachments (images → base64 + preview URL; text files → UTF-8). */
+export async function readFilesAsAttachments(files: File[]): Promise<{ attachments: PendingChatAttachment[]; errors: string[] }> {
+  const attachments: PendingChatAttachment[] = [];
+  const errors: string[] = [];
+  for (const file of Array.from(files)) {
+    const id = crypto.randomUUID();
+    const r = await readSingleFileAsAttachment(file, id);
+    if ('error' in r) errors.push(r.error);
+    else attachments.push(r.attachment);
+  }
+  return { attachments, errors };
 }
 
 /** Map raw server error strings to user-friendly messages. */
@@ -126,12 +280,34 @@ export function useChat() {
     });
   };
 
-  const send = async (text: string, thinking = false, model: ModelOption = LOCAL_MODELS[0], ragMode = true) => {
-    if (isStreaming || !text.trim()) return;
+  const send = async (
+    text: string,
+    thinking = false,
+    model: ModelOption = LOCAL_MODELS[0],
+    ragMode = true,
+    pending?: PendingChatAttachment[],
+  ) => {
+    if (isStreaming) return;
+    const built = buildOutgoing(text, pending, model);
+    if (!built.message && !built.images?.length) return;
+
+    const uiAttachments: UserAttachmentDisplay[] | undefined =
+      pending && pending.length > 0
+        ? pending
+            .filter((p) => p.status !== 'loading')
+            .map((p) => ({
+              id: p.id,
+              kind: p.kind,
+              name: p.name,
+              previewUrl: p.kind === 'image' ? p.previewUrl : undefined,
+            }))
+        : undefined;
 
     rawRef.current = '';
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
-    // Placeholder — shows "connecting" spinner while POST is in-flight and during TTFB
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: built.message, attachments: uiAttachments },
+    ]);
     setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'connecting' }]);
     setIsStreaming(true);
 
@@ -180,8 +356,14 @@ export function useChat() {
       };
 
       if (model.isLocal) {
-        // Ollama model name must be sent; otherwise main-server → llmServer uses its default (e.g. exaone3.5:2.4b).
-        const payload = { sessionId: effectiveSessionId, message: text, thinking, model: model.name, useRag: ragMode };
+        const payload: Parameters<typeof postChatMessage>[0] = {
+          sessionId: effectiveSessionId,
+          message: built.message,
+          thinking,
+          model: model.name,
+          useRag: ragMode,
+        };
+        if (built.images?.length) payload.images = built.images;
         const { sessionId: newSessionId } = await postChatMessage(payload, controller.signal);
         setSessionId(newSessionId);
         saveSessionModel(newSessionId, model);
@@ -204,10 +386,9 @@ export function useChat() {
           return;
         }
 
-        // Route through main-server to enable RAG support for API models
         const payload = {
           sessionId: effectiveSessionId,
-          message: text,
+          message: built.message,
           thinking,
           model: model.name,
           platform: model.platform,
@@ -240,6 +421,9 @@ export function useChat() {
         return [...prev, { role: 'assistant', content: errMsg, error: true }];
       });
     } finally {
+      pending?.forEach((p) => {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      });
       abortRef.current = null;
       setIsStreaming(false);
     }
@@ -254,7 +438,10 @@ export function useChat() {
     abortRef.current = null;
     rawRef.current = '';
     prevRoutingRef.current = null;
-    setMessages([]);
+    setMessages((prev) => {
+      revokeAttachmentUrls(prev);
+      return [];
+    });
     setSessionId(null);
     setIsStreaming(false);
   };
@@ -424,10 +611,15 @@ export function useChat() {
    */
   const prepareEdit = (targetIdx: number): string => {
     if (isStreaming) return '';
-    const text = messages[targetIdx]?.content ?? '';
-    setMessages((prev) => prev.slice(0, targetIdx));
+    let caption = '';
+    setMessages((prev) => {
+      const removed = prev.slice(targetIdx);
+      revokeAttachmentUrls(removed);
+      caption = stripFileBlocksForEdit(prev[targetIdx]?.content ?? '');
+      return prev.slice(0, targetIdx);
+    });
     prevRoutingRef.current = null;
-    return text;
+    return caption;
   };
 
   return { messages, isStreaming, send, regenerate, setVariant, prepareEdit, clear, stop, loadSession, sessionId };

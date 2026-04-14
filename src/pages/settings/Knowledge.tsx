@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useLang } from '../../context/LanguageContext';
 import {
   BookOpen, Upload, FileText, Plus, CheckCircle,
-  AlertCircle, Loader, FolderOpen, X, Tag, AlignLeft,
+  AlertCircle, Loader, FolderOpen, X, Tag, AlignLeft, Shield,
 } from 'lucide-react';
 import { RAG_INGEST_URL, RAG_INGEST_BATCH_URL } from '../../config/apiBase';
 
@@ -43,15 +43,33 @@ const CATEGORY_OPTIONS = [
   { value: 'other',    label: 'Custom…'        },
 ];
 
+/** Stored as Chroma metadata `role_visibility`; must align with RoleServer / RAG filter (uppercase). */
+const VISIBILITY_OPTIONS = [
+  { value: 'PUBLIC', label: 'Public — all authenticated users' },
+  { value: 'USER', label: 'User — standard users' },
+  { value: 'STAFF', label: 'Staff' },
+  { value: 'MANAGER', label: 'Manager' },
+  { value: 'ADMIN', label: 'Admin only' },
+];
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function countWords(text: string) {
   return text.trim() ? text.trim().split(/\s+/).length : 0;
 }
 
-function buildMetadata(category: string, customCategory: string, extra?: Record<string, unknown>) {
+function buildMetadata(
+  roleVisibility: string,
+  category: string,
+  customCategory: string,
+  extra?: Record<string, unknown>,
+) {
   const cat = category === 'other' ? customCategory.trim() : category;
-  return { ...(cat ? { category: cat } : {}), ...(extra ?? {}) };
+  return {
+    role_visibility: roleVisibility,
+    ...(cat ? { category: cat } : {}),
+    ...(extra ?? {}),
+  };
 }
 
 /** Parse Spring / gateway JSON errors; add a hint for opaque 500s from the RAG stack. */
@@ -88,6 +106,35 @@ function ResultBanner({ result }: { result: IngestResult }) {
         : <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
       }
       <span>{result.message}</span>
+    </div>
+  );
+}
+
+function VisibilityField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <Shield size={13} />
+        Who can retrieve this via RAG
+      </label>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+        Matches server roles (e.g. USER, MANAGER). Public documents are always visible to every role.
+      </p>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-300 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+      >
+        {VISIBILITY_OPTIONS.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -154,12 +201,14 @@ export default function Knowledge() {
 
   // Single document
   const [singleText,           setSingleText]           = useState('');
+  const [singleVisibility,     setSingleVisibility]     = useState('PUBLIC');
   const [singleCategory,       setSingleCategory]       = useState('');
   const [singleCustomCategory, setSingleCustomCategory] = useState('');
   const [singleResult,         setSingleResult]         = useState<IngestResult>({ status: 'idle' });
   const [singleLoading,        setSingleLoading]        = useState(false);
 
   // Batch
+  const [batchVisibility, setBatchVisibility] = useState('PUBLIC');
   const [batchDocs,    setBatchDocs]    = useState<Document[]>([]);
   const [batchInput,   setBatchInput]   = useState('');
   const [batchResult,  setBatchResult]  = useState<IngestResult>({ status: 'idle' });
@@ -168,6 +217,7 @@ export default function Knowledge() {
   // File upload
   const [selectedFiles,       setSelectedFiles]       = useState<string[]>([]);
   const [fileContents,        setFileContents]        = useState<Map<string, string>>(new Map());
+  const [fileVisibility,      setFileVisibility]      = useState('PUBLIC');
   const [fileCategory,        setFileCategory]        = useState('');
   const [fileCustomCategory,  setFileCustomCategory]  = useState('');
   const [fileResult,          setFileResult]          = useState<IngestResult>({ status: 'idle' });
@@ -246,7 +296,7 @@ export default function Knowledge() {
     setSingleLoading(true);
     setSingleResult({ status: 'idle' });
     try {
-      const metadata = buildMetadata(singleCategory, singleCustomCategory);
+      const metadata = buildMetadata(singleVisibility, singleCategory, singleCustomCategory);
       const res = await fetch(RAG_INGEST_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -255,6 +305,7 @@ export default function Knowledge() {
       if (res.ok) {
         setSingleResult({ status: 'success', message: 'Document added to your knowledge base!' });
         setSingleText('');
+        setSingleVisibility('PUBLIC');
         setSingleCategory('');
         setSingleCustomCategory('');
       } else {
@@ -285,7 +336,10 @@ export default function Knowledge() {
       const res = await fetch(RAG_INGEST_BATCH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(batchDocs.map(d => ({ text: d.text, metadata: d.metadata }))),
+        body: JSON.stringify(batchDocs.map(d => ({
+          text: d.text,
+          metadata: { ...d.metadata, role_visibility: batchVisibility },
+        }))),
       });
       if (res.ok) {
         const data = await res.json();
@@ -307,7 +361,7 @@ export default function Knowledge() {
     setFileLoading(true);
     setFileResult({ status: 'idle' });
     try {
-      const baseMetadata = buildMetadata(fileCategory, fileCustomCategory);
+      const baseMetadata = buildMetadata(fileVisibility, fileCategory, fileCustomCategory);
       const docs: { text: string; metadata: Record<string, unknown> }[] = [];
 
       for (const filePath of selectedFiles) {
@@ -346,6 +400,7 @@ export default function Knowledge() {
         setFileResult({ status: 'success', message: `${data.count} file${data.count !== 1 ? 's' : ''} added successfully!`, count: data.count });
         setSelectedFiles([]);
         setFileContents(new Map());
+        setFileVisibility('PUBLIC');
         setFileCategory('');
         setFileCustomCategory('');
       } else {
@@ -418,6 +473,8 @@ export default function Knowledge() {
             )}
           </div>
 
+          <VisibilityField value={singleVisibility} onChange={setSingleVisibility} />
+
           <CategoryField
             value={singleCategory}
             customValue={singleCustomCategory}
@@ -444,6 +501,7 @@ export default function Knowledge() {
           </p>
 
           <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+            <VisibilityField value={batchVisibility} onChange={setBatchVisibility} />
             {/* Input row */}
             <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
               <label className="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-2">
@@ -577,6 +635,8 @@ export default function Knowledge() {
                 </div>
               </div>
             )}
+
+            <VisibilityField value={fileVisibility} onChange={setFileVisibility} />
 
             <CategoryField
               value={fileCategory}

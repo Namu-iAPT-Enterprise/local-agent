@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Plus, Menu, Brain, ChevronDown, Check, Copy, RefreshCw, ChevronLeft, ChevronRight, Pencil, Database, ShieldAlert } from 'lucide-react';
+import { ArrowUp, Plus, Menu, Brain, ChevronDown, Check, Copy, RefreshCw, ChevronLeft, ChevronRight, Pencil, Database, ShieldAlert, X, FileText, Paperclip, Image } from 'lucide-react';
 import AssistantCards from './components/AssistantCards';
 import CreateAssistantModal from './components/CreateAssistantModal';
 import Sidebar from './components/Sidebar';
@@ -11,8 +11,18 @@ import RequestsScreen from './components/RequestsScreen';
 import KnowledgeScreen from './components/KnowledgeScreen';
 import { useTheme } from './context/ThemeContext';
 import { useLang } from './context/LanguageContext';
-import { useChat, ModelOption, LOCAL_MODELS } from './hooks/useChat';
-import type { AssistantVariant } from './hooks/useChat';
+import {
+  useChat,
+  ModelOption,
+  LOCAL_MODELS,
+  stripFileBlocksForEdit,
+  readSingleFileAsAttachment,
+  isProbablyImageFile,
+  getFileBasename,
+  type PendingChatAttachment,
+  type UserAttachmentDisplay,
+  type AssistantVariant,
+} from './hooks/useChat';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ThinkingBlock from './components/ThinkingBlock';
 import { getAccessToken, getAccountRole, saveAccountRole, logout as authLogout, getMe, getUserId } from './api/auth';
@@ -37,24 +47,55 @@ function detectCodeLanguage(text: string): string | null {
   return null;
 }
 
-function UserMessage({ content }: { content: string }) {
-  const hasFences = /```/.test(content);
-  const detectedLang = !hasFences ? detectCodeLanguage(content) : null;
+function UserMessage({ content, attachments }: { content: string; attachments?: UserAttachmentDisplay[] }) {
+  const displayText = stripFileBlocksForEdit(content);
+  const hasFences = /```/.test(displayText);
+  const detectedLang = !hasFences ? detectCodeLanguage(displayText) : null;
+
+  const attachmentRow =
+    attachments && attachments.length > 0 ? (
+      <div className="flex flex-wrap gap-1.5 justify-end mb-1.5 max-w-[88%] sm:max-w-[75%]">
+        {attachments.map((a) =>
+          a.kind === 'image' && a.previewUrl ? (
+            <img
+              key={a.id}
+              src={a.previewUrl}
+              alt=""
+              className="h-14 w-14 sm:h-16 sm:w-16 rounded-lg object-cover border border-white/25"
+            />
+          ) : (
+            <span
+              key={a.id}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-500/90 text-white text-xs border border-white/20"
+            >
+              <FileText size={12} />
+              {a.name}
+            </span>
+          ),
+        )}
+      </div>
+    ) : null;
 
   if (hasFences || detectedLang) {
-    const mdContent = hasFences ? content : `\`\`\`${detectedLang}\n${content}\n\`\`\``;
+    const mdContent = hasFences ? displayText : `\`\`\`${detectedLang}\n${displayText}\n\`\`\``;
     return (
-      <div className="max-w-[80%] bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-br-sm overflow-hidden">
-        <div className="px-4 py-3">
-          <MarkdownRenderer content={mdContent} />
+      <div className="flex flex-col items-end max-w-[88%] sm:max-w-[80%]">
+        {attachmentRow}
+        <div className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-br-sm overflow-hidden">
+          <div className="px-4 py-3">
+            <MarkdownRenderer content={mdContent} />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-[88%] sm:max-w-[75%] px-4 py-2.5 bg-blue-600 text-white rounded-2xl rounded-br-sm whitespace-pre-wrap leading-relaxed text-sm">
-      {content}
+    <div className="flex flex-col items-end max-w-[88%] sm:max-w-[75%]">
+      {attachmentRow}
+      <div className="px-4 py-2.5 bg-blue-600 text-white rounded-2xl rounded-br-sm whitespace-pre-wrap leading-relaxed text-sm">
+        {displayText || (attachments?.length ? '(attachment)' : '')}
+      </div>
     </div>
   );
 }
@@ -309,17 +350,21 @@ function AssistantMessageActions({
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
+type AppPage = 'login' | 'signup' | 'home' | 'settings' | 'admin-users' | 'requests' | 'knowledge';
+const APP_PAGE_HASHES: readonly AppPage[] = ['login', 'signup', 'home', 'settings', 'admin-users', 'requests', 'knowledge'];
+function isAppPage(hash: string): hash is AppPage {
+  return (APP_PAGE_HASHES as readonly string[]).includes(hash);
+}
+
 export default function App() {
   const [input, setInput] = useState('');
-  const [page, setPage] = useState<'login' | 'signup' | 'home' | 'settings' | 'admin-users' | 'requests' | 'knowledge'>(() => {
+  const [page, setPage] = useState<AppPage>(() => {
     const hash = window.location.hash.replace('#', '');
-    if (['login', 'signup', 'home', 'settings', 'admin-users', 'requests', 'knowledge'].includes(hash)) {
-      return hash as any;
-    }
+    if (isAppPage(hash)) return hash;
     return getAccessToken() ? 'home' : 'login';
   });
 
-  const navigateTo = (newPage: typeof page) => {
+  const navigateTo = (newPage: AppPage) => {
     setPage(newPage);
     window.history.pushState({ page: newPage }, '', `#${newPage}`);
   };
@@ -331,12 +376,13 @@ export default function App() {
     }
 
     const handlePopState = (event: PopStateEvent) => {
-      if (event.state && event.state.page) {
-        setPage(event.state.page);
+      const st = event.state as { page?: unknown } | null;
+      if (st && typeof st.page === 'string' && isAppPage(st.page)) {
+        setPage(st.page);
       } else {
         const hash = window.location.hash.replace('#', '');
-        if (['login', 'signup', 'home', 'settings', 'admin-users', 'requests', 'knowledge'].includes(hash)) {
-          setPage(hash as any);
+        if (isAppPage(hash)) {
+          setPage(hash);
         } else {
           setPage(getAccessToken() ? 'home' : 'login');
         }
@@ -360,7 +406,9 @@ export default function App() {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) {}
+      } catch {
+        void 0;
+      }
     }
     return LOCAL_MODELS[0];
   });
@@ -377,7 +425,9 @@ export default function App() {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch (e) {}
+      } catch {
+        void 0;
+      }
     }
     return null;
   });
@@ -449,7 +499,8 @@ export default function App() {
     prevStreaming.current = isStreaming;
   }, [isStreaming]);
 
-  const handleLogin = (_uid: string) => {
+  const handleLogin = (userId: string) => {
+    void userId;
     navigateTo('home');
     setSessionRefresh((n) => n + 1);
     // 역할 갱신은 isLoggedIn useEffect 가 처리합니다.
@@ -458,6 +509,7 @@ export default function App() {
   const handleLogout = async () => {
     await authLogout();
     clear();
+    setPendingAttachments([]);
     setAccountRole(null);
     navigateTo('login');
   };
@@ -472,6 +524,60 @@ export default function App() {
   };
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingChatAttachment[]>([]);
+
+  const addPendingFilesFromBrowser = async (fileArr: File[]) => {
+    if (!fileArr.length) return;
+    const ids = fileArr.map(() => crypto.randomUUID());
+    setPendingAttachments((p) => [
+      ...p,
+      ...fileArr.map((file, i) => ({
+        id: ids[i],
+        kind: (isProbablyImageFile(file) ? 'image' : 'file') as 'image' | 'file',
+        name: getFileBasename(file),
+        status: 'loading' as const,
+      })),
+    ]);
+    try {
+      const results = await Promise.all(fileArr.map((f, i) => readSingleFileAsAttachment(f, ids[i])));
+      const errors: string[] = [];
+      setPendingAttachments((prev) => {
+        let next = [...prev];
+        for (let i = 0; i < results.length; i++) {
+          const id = ids[i];
+          const r = results[i];
+          if ('error' in r) {
+            next = next.filter((a) => a.id !== id);
+            errors.push(r.error);
+          } else {
+            next = next.map((a) => (a.id === id ? r.attachment : a));
+          }
+        }
+        return next;
+      });
+      if (errors.length) window.alert(errors.join('\n'));
+    } catch (e) {
+      setPendingAttachments((prev) => prev.filter((a) => !ids.includes(a.id)));
+      const msg = e instanceof Error ? e.message : String(e);
+      window.alert(`Could not read file(s): ${msg}`);
+    }
+  };
+
+  const handleChatFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    e.target.value = '';
+    if (!files?.length) return;
+    await addPendingFilesFromBrowser(Array.from(files));
+  };
+
+  const removePendingAttachment = (id: string) => {
+    setPendingAttachments((p) => {
+      const x = p.find((a) => a.id === id);
+      if (x?.previewUrl) URL.revokeObjectURL(x.previewUrl);
+      return p.filter((a) => a.id !== id);
+    });
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -479,15 +585,22 @@ export default function App() {
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (pendingAttachments.some((a) => a.status === 'loading')) return;
+    if ((!text && pendingAttachments.length === 0) || isStreaming) return;
     setInput('');
-    
-    // If an assistant is active, prepend the system prompt
-    const messageToSend = activeAssistant 
-      ? `${activeAssistant.systemPrompt}\n\n${text}` 
+
+    const messageToSend = activeAssistant
+      ? `${activeAssistant.systemPrompt}\n\n${text}`
       : text;
-    
-    send(messageToSend, thinkingMode, selectedModel, ragMode);
+
+    send(
+      messageToSend,
+      thinkingMode,
+      selectedModel,
+      ragMode,
+      pendingAttachments.length > 0 ? pendingAttachments : undefined,
+    );
+    setPendingAttachments([]);
     textareaRef.current?.focus();
   };
 
@@ -543,6 +656,11 @@ export default function App() {
 
   const chatInputProps = {
     textareaRef,
+    chatFileInputRef,
+    onChatFileChange: handleChatFileChange,
+    onAddFilesFromBrowser: addPendingFilesFromBrowser,
+    pendingAttachments,
+    onRemovePendingAttachment: removePendingAttachment,
     input,
     setInput,
     isStreaming,
@@ -563,7 +681,7 @@ export default function App() {
       <div className="hidden md:flex">
         <Sidebar
           onSettings={() => navigateTo('settings')}
-          onNewChat={() => { clear(); setSessionRefresh((n) => n + 1); }}
+          onNewChat={() => { clear(); setPendingAttachments([]); setSessionRefresh((n) => n + 1); }}
           onLogout={handleLogout}
           onSelectSession={handleSelectSession}
           activeSessionId={sessionId}
@@ -593,7 +711,7 @@ export default function App() {
           <div className="w-64 flex-shrink-0">
             <Sidebar
               onSettings={() => { navigateTo('settings'); setMobileMenuOpen(false); }}
-              onNewChat={() => { clear(); setSessionRefresh((n) => n + 1); setMobileMenuOpen(false); }}
+              onNewChat={() => { clear(); setPendingAttachments([]); setSessionRefresh((n) => n + 1); setMobileMenuOpen(false); }}
               onLogout={() => { handleLogout(); setMobileMenuOpen(false); }}
               onSelectSession={handleSelectSession}
               activeSessionId={sessionId}
@@ -650,7 +768,7 @@ export default function App() {
                     )}
                     {msg.role === 'user' ? (
                       <div className="flex flex-col items-end">
-                        <UserMessage content={msg.content} />
+                        <UserMessage content={msg.content} attachments={msg.attachments} />
                         <UserMessageActions
                           content={msg.content}
                           onEdit={() => {
@@ -780,6 +898,12 @@ export default function App() {
 
 interface ChatInputProps {
   textareaRef: React.RefObject<HTMLTextAreaElement>;
+  chatFileInputRef: React.RefObject<HTMLInputElement>;
+  onChatFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  /** Same pipeline as the hidden file input — used for drag-and-drop onto the composer. */
+  onAddFilesFromBrowser: (files: File[]) => void | Promise<void>;
+  pendingAttachments: PendingChatAttachment[];
+  onRemovePendingAttachment: (id: string) => void;
   input: string;
   setInput: (v: string) => void;
   isStreaming: boolean;
@@ -795,15 +919,130 @@ interface ChatInputProps {
   placeholder: string;
 }
 
+/** Document/code picker; image extensions included so “Upload files” still accepts photos (Electron-friendly). */
+const CHAT_FILE_ACCEPT =
+  '.txt,.text,.md,.markdown,.mdx,.csv,.json,.xml,.log,.ts,.tsx,.js,.jsx,.mjs,.cjs,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.sql,.yaml,.yml,.sh,.env,.css,.scss,.html,.vue,.svelte,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.ico,.heic,.heif,.avif,.tif,.tiff';
+
 function ChatInput({
-  textareaRef, input, setInput,
+  textareaRef,
+  chatFileInputRef,
+  onChatFileChange,
+  onAddFilesFromBrowser,
+  pendingAttachments,
+  onRemovePendingAttachment,
+  input, setInput,
   isStreaming, thinkingMode, onThinkingToggle,
   ragMode, onRagToggle,
   selectedModel, onModelChange,
   onSend, onStop, onKeyDown, placeholder,
 }: ChatInputProps) {
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
+  const chatImageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
+        setAttachMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAttachMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [attachMenuOpen]);
+
+  const attachmentBusy = pendingAttachments.some((a) => a.status === 'loading');
+  const canSend =
+    !attachmentBusy && (input.trim().length > 0 || pendingAttachments.length > 0);
+  const hasAttachments = pendingAttachments.length > 0;
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-900 shadow-md overflow-visible">
+    <div
+      className="border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-900 shadow-md overflow-visible"
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length) void onAddFilesFromBrowser(files);
+      }}
+      title="Drop images or text files here, or use + to attach"
+    >
+      <input
+        ref={chatFileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        accept={CHAT_FILE_ACCEPT}
+        onChange={onChatFileChange}
+      />
+      <input
+        ref={chatImageInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        accept="image/*"
+        onChange={onChatFileChange}
+      />
+      {hasAttachments && (
+        <div
+          className="flex flex-wrap gap-2.5 px-4 md:px-5 pt-3 pb-2 border-b border-gray-100 dark:border-gray-800 min-h-[5.5rem] relative z-10"
+          aria-busy={attachmentBusy}
+        >
+          {pendingAttachments.map((a, attachIdx) => (
+            <div
+              key={a.id}
+              className="relative flex-shrink-0 flex flex-col items-center gap-1 w-[4.5rem]"
+            >
+              <div
+                className="relative h-16 w-16 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-800/80 shadow-sm"
+                title={a.name}
+              >
+                {a.status === 'loading' ? (
+                  <div
+                    className={`chat-composer-attachment-skeleton h-full w-full rounded-2xl ${
+                      a.kind !== 'image' ? 'opacity-90' : ''
+                    }`}
+                    style={{ animationDelay: `${attachIdx * 90}ms` }}
+                    aria-hidden
+                  />
+                ) : a.kind === 'image' && a.previewUrl ? (
+                  <img src={a.previewUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center p-2">
+                    <FileText size={22} className="text-gray-400 dark:text-gray-500" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onRemovePendingAttachment(a.id)}
+                  className="absolute -right-1 -top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 dark:border-gray-500 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-200 shadow-md hover:bg-red-50 hover:border-red-200 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:border-red-800 dark:hover:text-red-300 transition-colors"
+                  aria-label={`Remove ${a.name}`}
+                >
+                  <X size={13} strokeWidth={2.5} />
+                </button>
+              </div>
+              <span
+                className={`w-full text-center text-[10px] leading-tight truncate px-0.5 text-gray-500 dark:text-gray-400 ${
+                  a.status === 'loading' ? 'opacity-60' : ''
+                }`}
+                title={a.name}
+              >
+                {a.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         value={input}
@@ -812,33 +1051,73 @@ function ChatInput({
         placeholder={placeholder}
         rows={3}
         disabled={isStreaming}
-        className="w-full px-4 md:px-5 pt-4 pb-2 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 outline-none resize-none bg-transparent disabled:opacity-60 rounded-t-2xl"
+        className={`w-full px-4 md:px-5 pt-4 pb-2 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 outline-none resize-none bg-transparent disabled:opacity-60 ${
+          hasAttachments ? '' : 'rounded-t-2xl'
+        }`}
       />
       <div className="flex items-center justify-between px-3 md:px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-        <button className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-          <Plus size={16} />
-        </button>
+        <div className="relative" ref={attachMenuRef}>
+          <button
+            type="button"
+            disabled={isStreaming}
+            onClick={() => setAttachMenuOpen((o) => !o)}
+            title="Attach files or photos"
+            aria-expanded={attachMenuOpen}
+            aria-haspopup="menu"
+            className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
+          >
+            <Plus size={16} />
+          </button>
+          {attachMenuOpen && (
+            <div
+              role="menu"
+              className="absolute bottom-full left-0 mb-2 z-[60] min-w-[220px] rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg py-1 overflow-hidden"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700/80 transition-colors"
+                onClick={() => {
+                  chatFileInputRef.current?.click();
+                  setAttachMenuOpen(false);
+                }}
+              >
+                <Paperclip size={18} className="text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                <span>Upload files</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700/80 transition-colors"
+                onClick={() => {
+                  chatImageInputRef.current?.click();
+                  setAttachMenuOpen(false);
+                }}
+              >
+                <Image size={18} className="text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                <span>Photos</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
           {/* Model dropdown */}
           <ModelSelector selected={selectedModel} onChange={onModelChange} />
 
           {/* RAG toggle — available for all models */}
-          {(
-            
-            <button
-              onClick={onRagToggle}
-              title={ragMode ? 'Knowledge base ON — click to disable' : 'Knowledge base OFF — click to enable'}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                ragMode
-                  ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
-                  : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              <Database size={13} />
-              <span className="hidden sm:inline">Knowledge</span>
-            </button>
-          )}
+          <button
+            onClick={onRagToggle}
+            title={ragMode ? 'Knowledge base ON — click to disable' : 'Knowledge base OFF — click to enable'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              ragMode
+                ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
+                : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <Database size={13} />
+            <span className="hidden sm:inline">Knowledge</span>
+          </button>
 
           {/* Thinking toggle */}
           <button
@@ -865,7 +1144,7 @@ function ChatInput({
           ) : (
             <button
               onClick={onSend}
-              disabled={!input.trim()}
+              disabled={!canSend}
               className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-300 hover:bg-blue-600 hover:text-white disabled:opacity-40 disabled:hover:bg-gray-200 dark:disabled:hover:bg-gray-700 disabled:hover:text-gray-500 transition-colors"
             >
               <ArrowUp size={14} />

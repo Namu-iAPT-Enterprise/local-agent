@@ -58,7 +58,7 @@ async function probeRagIngest(base, label) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: 'probe', metadata: { probe: true } }),
+    body: JSON.stringify({ text: 'probe', metadata: { probe: true, role_visibility: 'PUBLIC' } }),
   });
   const body = await res.text();
   console.log(`\n[probe ${label}] POST ${url}`);
@@ -111,6 +111,7 @@ async function main() {
         source: 'namu-enterprise-kb',
         title: '나무 엔터프라이즈 Knowledge Base (1~7)',
         category: 'company',
+        role_visibility: process.env.RAG_ROLE_VISIBILITY || 'PUBLIC',
       },
     }),
   });
@@ -136,6 +137,7 @@ async function main() {
             source: 'namu-enterprise-kb',
             title: '나무 엔터프라이즈 Knowledge Base (1~7)',
             category: 'company',
+            role_visibility: process.env.RAG_ROLE_VISIBILITY || 'PUBLIC',
           },
         }),
       });
