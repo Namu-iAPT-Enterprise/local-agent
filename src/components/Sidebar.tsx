@@ -31,12 +31,8 @@ const CATEGORY_COLOR: Record<FeatureCategory, string> = {
   request:   'text-violet-500',
 };
 
-const ROLE_COLORS: Record<string, string> = {
-  WANDERER: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-  KEEPER:   'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-  HERALD:   'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  SOVEREIGN:'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
-};
+/** Default badge color for role IDs. Unknown roles get a neutral style. */
+const ROLE_BADGE_DEFAULT = 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
 
 function hasAppAccess(featureKeys: string[], allowedApis: AllowedApi[]): boolean {
   return allowedApis.some(api => api.featureKey && featureKeys.includes(api.featureKey));
@@ -53,12 +49,12 @@ interface SidebarProps {
   refreshTrigger?: number;
   permissionsStatus?: PermissionStatus;
   allowedApis?: AllowedApi[];
-  permissionRoles?: string[];
+  roleIds?: string[];
+  enabledFeatures?: string[];
   accountRole?: string | null;
   userId?: string | null;
   onFeatureClick?: (featureKey: string) => void;
   onRefreshPermissions?: () => void;
-  onCreateDefaultRoles?: () => void;
 }
 
 export default function Sidebar({
@@ -70,12 +66,12 @@ export default function Sidebar({
   refreshTrigger = 0,
   permissionsStatus = 'idle',
   allowedApis = [],
-  permissionRoles = [],
+  roleIds = [],
+  enabledFeatures = [],
   accountRole = null,
   userId = null,
   onFeatureClick,
   onRefreshPermissions,
-  onCreateDefaultRoles,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const { bgImage } = useTheme();
@@ -135,8 +131,7 @@ export default function Sidebar({
     }
   };
 
-  // 기본 권한(WANDERER) 등록을 관리자에게 요청합니다.
-  // POST /api/management/request/post — 인증 없이 호출 가능
+  // Request role assignment from admin
   const handleRequestDefaultRole = async () => {
     if (!userId || roleReqStatus === 'loading' || roleReqStatus === 'success') return;
     setRoleReqStatus('loading');
@@ -144,8 +139,8 @@ export default function Sidebar({
       await postManagementRequest({
         source: 'frontend',
         type: 'ROLE_REQUEST',
-        title: `기본 권한 등록 요청 — ${userId}`,
-        message: `사용자 '${userId}'에게 기본 권한(WANDERER)을 등록해 주세요.`,
+        title: `역할 배정 요청 — ${userId}`,
+        message: `사용자 '${userId}'에게 역할을 배정해 주세요.`,
       });
       setRoleReqStatus('success');
     } catch {
@@ -168,17 +163,12 @@ export default function Sidebar({
   }
 
   const isAdmin = accountRole === 'ADMIN';
-  const isSovereign = permissionRoles.includes('SOVEREIGN');
-  const isKeeper   = permissionRoles.includes('KEEPER');
-  const hasAdminAccess = isAdmin || isSovereign;
+  const hasAdminAccess = isAdmin || enabledFeatures.includes('ROLE_DEFINE_CREATE');
   const isLoaded = permissionsStatus === 'loaded' || permissionsStatus === 'loading';
-  const hasNoRoles = isLoaded && permissionRoles.length === 0;
+  const hasNoRoles = isLoaded && roleIds.length === 0;
 
-  // knowledge 화면: SOVEREIGN·KEEPER 역할 보유자는 allowedApis 유무와 무관하게 접근 허용
-  // (Role Server 정책에 KNOWLEDGE_REGISTER featureKey가 누락된 경우 방어)
   function hasFeatureAccess(f: typeof APP_FEATURES[number]): boolean {
     if (f.adminOnly) return hasAdminAccess;
-    if (f.id === 'knowledge-manage') return isSovereign || isKeeper || hasAppAccess(f.requiredFeatureKeys, allowedApis);
     return hasAppAccess(f.requiredFeatureKeys, allowedApis);
   }
 
@@ -361,15 +351,15 @@ export default function Sidebar({
               </button>
             </div>
 
-            {/* Permission Roles */}
-            {permissionRoles.length > 0 ? (
+            {/* Role Badges */}
+            {roleIds.length > 0 ? (
               <div className="flex flex-wrap gap-1 mb-2">
-                {permissionRoles.map((r) => (
-                  <span key={r} className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ROLE_COLORS[r] ?? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>{r}</span>
+                {roleIds.map((r) => (
+                  <span key={r} className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ROLE_BADGE_DEFAULT}`}>{r}</span>
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-400 mb-2">권한 역할 없음</p>
+              <p className="text-xs text-gray-400 mb-2">역할 없음</p>
             )}
 
             {/* Allowed features */}
@@ -427,14 +417,14 @@ export default function Sidebar({
                     ? '요청이 전송되었습니다. 관리자 처리 후 반영됩니다.'
                     : roleReqStatus === 'error'
                     ? '요청 전송에 실패했습니다. 다시 시도하세요.'
-                    : '기본 권한(WANDERER) 등록을 관리자에게 요청합니다.'
+                    : '역할 배정을 관리자에게 요청합니다.'
                 }
                 className="flex items-center justify-center gap-1.5 w-full py-1.5 text-xs font-medium rounded-lg border border-dashed border-amber-400 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 {roleReqStatus === 'loading' && <RefreshCw size={13} className="animate-spin" />}
                 {roleReqStatus === 'success' && <CheckCircle size={13} className="text-emerald-500" />}
                 {roleReqStatus === 'error'   && <AlertCircle size={13} className="text-red-500" />}
                 {(roleReqStatus === 'idle' || roleReqStatus === 'error') && <ShieldPlus size={13} />}
-                {roleReqStatus === 'idle'    && '기본 권한 요청'}
+                {roleReqStatus === 'idle'    && '역할 배정 요청'}
                 {roleReqStatus === 'loading' && '요청 중...'}
                 {roleReqStatus === 'success' && '요청 완료'}
                 {roleReqStatus === 'error'   && '재시도'}

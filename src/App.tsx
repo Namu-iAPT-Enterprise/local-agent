@@ -21,7 +21,7 @@ import {
   type PendingChatAttachment,
 } from './hooks/useChat';
 import { getAccessToken, getAccountRole, saveAccountRole, logout as authLogout, getMe, getUserId } from './api/auth';
-import { createUserPermissionRoles } from './api/gateway';
+// v2: role assignment is done through AdminUsers page, not auto-created
 import type { ChatSessionInfo } from './api/chat';
 import { usePermissions } from './hooks/usePermissions';
 import { defaultAssistants, getCustomAssistants, saveCustomAssistant, type OfficeAssistant } from './data/officeAssistants';
@@ -149,11 +149,9 @@ export default function App() {
 
   const isLoggedIn = page !== 'login' && page !== 'signup';
   const permissions = usePermissions(isLoggedIn);
-  const hasAdminAccess = accountRole === 'ADMIN' || permissions.permissionRoles.includes('SOVEREIGN');
+  const hasAdminAccess = accountRole === 'ADMIN' || permissions.enabledFeatures.includes('ROLE_DEFINE_CREATE');
   const hasKnowledgeAccess = accountRole === 'ADMIN'
-    || permissions.permissionRoles.includes('SOVEREIGN')
-    || permissions.permissionRoles.includes('KEEPER')
-    || permissions.allowedApis.some((a) => a.featureKey === 'KNOWLEDGE_REGISTER');
+    || permissions.enabledFeatures.includes('KNOWLEDGE_CREATE');
 
   useEffect(() => {
     const handler = () => { clear(); navigateTo('login'); };
@@ -315,7 +313,8 @@ export default function App() {
     <Settings
       onBack={() => navigateTo('home')}
       accountRole={accountRole}
-      permissionRoles={permissions.permissionRoles}
+      permissionTags={permissions.permissionTags}
+      enabledFeatures={permissions.enabledFeatures}
     />
   );
   if (page === 'admin-users') {
@@ -389,21 +388,16 @@ export default function App() {
           refreshTrigger={sessionRefresh}
           permissionsStatus={permissions.status}
           allowedApis={permissions.allowedApis}
-          permissionRoles={permissions.permissionRoles}
+          roleIds={permissions.roleIds}
+          enabledFeatures={permissions.enabledFeatures}
           accountRole={accountRole}
           onFeatureClick={(key) => {
             if (key === 'ADMIN_USERS') navigateTo('admin-users');
             if (key === 'ADMIN_REQUESTS') navigateTo('requests');
-            if (['KNOWLEDGE_REGISTER', 'KNOWLEDGE_UPDATE', 'KNOWLEDGE_PURGE'].includes(key)) navigateTo('knowledge');
+            if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) navigateTo('knowledge');
           }}
           userId={getUserId()}
           onRefreshPermissions={() => permissions.reload()}
-          onCreateDefaultRoles={async () => {
-            const uid = getUserId();
-            if (!uid) return;
-            try { await createUserPermissionRoles(uid, ['WANDERER']); } catch { /* already exists */ }
-            permissions.reload();
-          }}
         />
       </div>
 
@@ -419,21 +413,16 @@ export default function App() {
               refreshTrigger={sessionRefresh}
               permissionsStatus={permissions.status}
               allowedApis={permissions.allowedApis}
-              permissionRoles={permissions.permissionRoles}
+              roleIds={permissions.roleIds}
+              enabledFeatures={permissions.enabledFeatures}
               accountRole={accountRole}
               onFeatureClick={(key) => {
                 if (key === 'ADMIN_USERS') { navigateTo('admin-users'); setMobileMenuOpen(false); }
                 if (key === 'ADMIN_REQUESTS') { navigateTo('requests'); setMobileMenuOpen(false); }
-                if (['KNOWLEDGE_REGISTER', 'KNOWLEDGE_UPDATE', 'KNOWLEDGE_PURGE'].includes(key)) { navigateTo('knowledge'); setMobileMenuOpen(false); }
+                if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) { navigateTo('knowledge'); setMobileMenuOpen(false); }
               }}
               userId={getUserId()}
               onRefreshPermissions={() => permissions.reload()}
-              onCreateDefaultRoles={async () => {
-                const uid = getUserId();
-                if (!uid) return;
-                try { await createUserPermissionRoles(uid, ['WANDERER']); } catch { /* already exists */ }
-                permissions.reload();
-              }}
             />
           </div>
           <div className="flex-1 bg-black/40" onClick={() => setMobileMenuOpen(false)} role="presentation" />

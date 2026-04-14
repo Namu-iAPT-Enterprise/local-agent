@@ -8,7 +8,13 @@ export type PermissionStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
 export interface PermissionState {
   status: PermissionStatus;
-  permissionRoles: string[];
+  /** Assigned role IDs (e.g. "ORIGIN", "TEAM_ALPHA_LEAD") */
+  roleIds: string[];
+  /** Union of permission tags from all assigned roles */
+  permissionTags: string[];
+  /** Feature keys enabled for the user (frontend UI control) */
+  enabledFeatures: string[];
+  /** Allowed API details */
   allowedApis: AllowedApi[];
   reload: () => void;
 }
@@ -16,16 +22,16 @@ export interface PermissionState {
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
 /**
- * 로그인 후 GET /api/management/role/profile 를 호출해 권한 정보를 가져옵니다.
- *
- * reload()를 호출하면 즉시 재조회합니다.
- * isLoggedIn이 false가 되면(로그아웃) 상태를 idle로 초기화합니다.
+ * Fetches permission info from GET /api/management/role/profile after login.
+ * Call reload() to refetch immediately.
  */
 export function usePermissions(isLoggedIn: boolean): PermissionState {
   const [reloadCount, setReloadCount] = useState(0);
   const [state, setState] = useState<Omit<PermissionState, 'reload'>>({
     status: 'idle',
-    permissionRoles: [],
+    roleIds: [],
+    permissionTags: [],
+    enabledFeatures: [],
     allowedApis: [],
   });
 
@@ -35,7 +41,7 @@ export function usePermissions(isLoggedIn: boolean): PermissionState {
 
   useEffect(() => {
     if (!isLoggedIn) {
-      setState({ status: 'idle', permissionRoles: [], allowedApis: [] });
+      setState({ status: 'idle', roleIds: [], permissionTags: [], enabledFeatures: [], allowedApis: [] });
       return;
     }
 
@@ -47,13 +53,15 @@ export function usePermissions(isLoggedIn: boolean): PermissionState {
         if (cancelled) return;
         setState({
           status: 'loaded',
-          permissionRoles: data.permissionRoles ?? [],
+          roleIds: data.roleIds ?? [],
+          permissionTags: data.permissionTags ?? [],
+          enabledFeatures: data.enabledFeatures ?? [],
           allowedApis: data.allowedApis ?? [],
         });
       })
       .catch(() => {
         if (cancelled) return;
-        setState({ status: 'error', permissionRoles: [], allowedApis: [] });
+        setState({ status: 'error', roleIds: [], permissionTags: [], enabledFeatures: [], allowedApis: [] });
       });
 
     return () => { cancelled = true; };

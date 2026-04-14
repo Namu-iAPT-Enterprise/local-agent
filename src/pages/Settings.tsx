@@ -46,20 +46,22 @@ const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
 
 interface SettingsProps {
   onBack: () => void;
-  /** 계정 역할 (ADMIN 이면 관리자 탭 표시) */
+  /** Account role (ADMIN shows admin tabs) */
   accountRole?: string | null;
-  /** 권한 역할 목록 (SOVEREIGN 이면 관리자 탭 표시) */
-  permissionRoles?: string[];
+  /** Permission tags from role server */
+  permissionTags?: string[];
+  /** Enabled feature keys for this user */
+  enabledFeatures?: string[];
 }
 
-export default function Settings({ onBack, accountRole = null, permissionRoles = [] }: SettingsProps) {
+export default function Settings({ onBack, accountRole = null, permissionTags = [], enabledFeatures = [] }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('model');
   const [collapsed, setCollapsed] = useState(false);
   const { bgImage } = useTheme();
   const { tr } = useLang();
 
-  // Show admin tab when account is ADMIN or permission role is SOVEREIGN
-  const hasAdminAccess = accountRole === 'ADMIN' || permissionRoles.includes('SOVEREIGN');
+  // Show admin tab when account is ADMIN or user has admin-level features
+  const hasAdminAccess = accountRole === 'ADMIN' || enabledFeatures.includes('ROLE_DEFINE_CREATE');
 
   const tabLabels: Record<TabId, string> = {
     model: tr.model, assistants: tr.assistants, 'skills-hub': tr.skillsHub,

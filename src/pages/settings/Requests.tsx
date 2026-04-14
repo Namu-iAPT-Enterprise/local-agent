@@ -200,7 +200,7 @@ export default function Requests() {
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">문의사항 관리</h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              사용자가 보낸 요청·문의사항을 조회합니다. SOVEREIGN 이상만 열람 가능합니다.
+              사용자가 보낸 요청·문의사항을 조회합니다. REQUEST_VIEW_ALL 권한이 필요합니다.
             </p>
           </div>
           <button

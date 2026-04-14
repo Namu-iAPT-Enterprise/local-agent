@@ -11,85 +11,106 @@ export interface AllowedApi {
 }
 
 /**
- * GET /api/management/role/profile 응답 모델
+ * GET /api/management/role/profile response (v2)
  *
- * 정보 및 역할 제어 시스템(Data Gateway)이 반환하는 권한 정보.
- * 게이트웨이는 JWT 인증만 처리하고 Data Gateway로 프록시합니다.
+ * Role Server returns the user's assigned roles, computed permission tags,
+ * enabled feature keys, and allowed API list.
  */
 export interface RolePermissionsResponse {
   userId: string;
-  permissionRoles: string[];
-  /** UI 기능 활성화 키 목록 (featureKey 기반) */
-  enabledFeatures?: string[];
-  /** 접근 가능한 API 상세 목록 */
+  /** Assigned role IDs (e.g. "ORIGIN", "TEAM_ALPHA_LEAD") */
+  roleIds: string[];
+  /** Union of all permission tags from assigned roles */
+  permissionTags: string[];
+  /** Feature keys enabled for this user (frontend UI control) */
+  enabledFeatures: string[];
+  /** Allowed API details */
   allowedApis: AllowedApi[];
 }
 
-// ── Permission Role management types ──────────────────────────────────────────
-
-export type PermissionRole = 'WANDERER' | 'KEEPER' | 'HERALD' | 'SOVEREIGN';
-
 export interface RoleGetResponse {
   userId: string;
-  permissionRoles: PermissionRole[];
+  permissionTags: string[];
+}
+
+// ── Role Definition types ─────────────────────────────────────────────────────
+
+export interface RoleDefinitionDto {
+  roleId: string;
+  displayName: string;
+  loreDescription?: string;
+  type: 'PERMISSION' | 'TEAM' | 'TAG';
+  teamId?: string;
+  parentRoleId?: string;
+  adminAccountRequired: boolean;
+  system: boolean;
+  createdBy?: string;
+  createdAt?: string;
+  permissionTagIds?: string[];
+  manageableByRoleIds?: string[];
 }
 
 // ── API ────────────────────────────────────────────────────────────────────────
 
 export async function fetchRolePermissions(): Promise<RolePermissionsResponse> {
   const res = await fetchWithAuth(`${API_BASE}/api/management/role/profile`);
-  if (!res.ok) {
-    throw new Error(`권한 조회 실패 (${res.status})`);
-  }
+  if (!res.ok) throw new Error(`권한 조회 실패 (${res.status})`);
   return res.json();
 }
 
 /**
  * GET /api/management/role/get?userId=
- * 대상 사용자의 권한 역할(Permission Role) 목록을 조회합니다. SOVEREIGN 이상 필요.
- * 404 = 해당 사용자의 역할 레코드가 없음 (신규 등록 대상).
+ * Returns the user's permission tags. Requires ROLE_VIEW_ANY tag for other users.
  */
-export async function fetchUserPermissionRoles(userId: string): Promise<RoleGetResponse> {
+export async function fetchUserPermissionTags(userId: string): Promise<RoleGetResponse> {
   const res = await fetchWithAuth(`${API_BASE}/api/management/role/get?userId=${encodeURIComponent(userId)}`);
-  if (res.status === 403) throw new Error('접근 권한이 없습니다 (SOVEREIGN 이상 필요).');
-  if (res.status === 404) throw new NotFoundError(`${userId} 의 역할 레코드가 없습니다.`);
-  if (!res.ok) throw new Error(`권한 역할 조회 실패 (${res.status})`);
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (res.status === 404) throw new NotFoundError(`${userId} 의 역할 정보가 없습니다.`);
+  if (!res.ok) throw new Error(`권한 조회 실패 (${res.status})`);
   return res.json();
 }
 
 /**
- * POST /api/management/role/new
- * 사용자의 권한 역할을 신규 등록합니다 (레코드가 없어야 함). SOVEREIGN 이상 필요.
+ * POST /api/management/role/assign
+ * Assigns a role to a user. Requires ROLE_ASSIGN_ANY + ADMIN + manageableBy.
  */
-export async function createUserPermissionRoles(userId: string, permissionRoles: PermissionRole[]): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/new`, {
+export async function assignRole(userId: string, roleId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/assign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, permissionRoles }),
+    body: JSON.stringify({ userId, roleId }),
   });
-  if (res.status === 403) throw new Error('접근 권한이 없습니다 (SOVEREIGN 이상 필요).');
-  if (res.status === 409) throw new Error('이미 역할 레코드가 존재합니다. 수정을 사용하세요.');
-  if (!res.ok) throw new Error(`역할 등록 실패 (${res.status})`);
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (!res.ok) throw new Error(`역할 배정 실패 (${res.status})`);
 }
 
 /**
- * PATCH /api/management/role/update
- * 사용자의 권한 역할을 전량 교체합니다. SOVEREIGN 이상 필요.
+ * DELETE /api/management/role/revoke
+ * Revokes a role from a user. Requires ROLE_REVOKE_ANY + ADMIN + manageableBy.
  */
-export async function updateUserPermissionRoles(userId: string, permissionRoles: PermissionRole[]): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/update`, {
-    method: 'PATCH',
+export async function revokeRole(userId: string, roleId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/revoke`, {
+    method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, permissionRoles }),
+    body: JSON.stringify({ userId, roleId }),
   });
-  if (res.status === 403) throw new Error('접근 권한이 없습니다 (SOVEREIGN 이상 필요).');
-  if (res.status === 404) throw new NotFoundError('사용자를 찾을 수 없습니다. 먼저 등록하세요.');
-  if (!res.ok) throw new Error(`역할 수정 실패 (${res.status})`);
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (res.status === 404) throw new NotFoundError('배정되지 않은 역할입니다.');
+  if (!res.ok) throw new Error(`역할 제거 실패 (${res.status})`);
+}
+
+/**
+ * GET /api/management/role/define
+ * Lists all role definitions.
+ */
+export async function fetchRoleDefinitions(): Promise<RoleDefinitionDto[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define`);
+  if (!res.ok) throw new Error(`역할 정의 목록 조회 실패 (${res.status})`);
+  return res.json();
 }
 
 /**
  * POST /api/management/role/reload
- * 특정 사용자의 권한 캐시를 새로고침합니다.
  */
 export async function reloadUserPermissionCache(userId: string): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/management/role/reload?userId=${encodeURIComponent(userId)}`, {
@@ -100,7 +121,6 @@ export async function reloadUserPermissionCache(userId: string): Promise<void> {
 
 /**
  * POST /api/management/role/reload/all
- * 모든 사용자의 권한 캐시를 새로고침합니다.
  */
 export async function reloadAllPermissionCache(): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/management/role/reload/all`, {
@@ -109,7 +129,6 @@ export async function reloadAllPermissionCache(): Promise<void> {
   if (!res.ok) throw new Error(`전체 캐시 새로고침 실패 (${res.status})`);
 }
 
-/** 역할 레코드 없음(404)을 구분하기 위한 에러 타입 */
 export class NotFoundError extends Error {
   constructor(message: string) { super(message); this.name = 'NotFoundError'; }
 }
@@ -135,10 +154,6 @@ export interface ManagementRequestResponse {
   createdAt: string;
 }
 
-/**
- * POST /api/management/request/post
- * 관리자에게 요청/알림을 전송합니다. 인증 없이 호출 가능합니다.
- */
 export async function postManagementRequest(
   payload: ManagementRequestPayload
 ): Promise<ManagementRequestResponse> {
@@ -151,24 +166,16 @@ export async function postManagementRequest(
   return res.json();
 }
 
-/**
- * GET /api/management/request/list
- * 전체 문의사항 목록을 조회합니다. SOVEREIGN 이상 필요.
- */
 export async function fetchManagementRequests(): Promise<ManagementRequestResponse[]> {
   const res = await fetchWithAuth(`${API_BASE}/api/management/request/list`);
-  if (res.status === 403) throw new Error('접근 권한이 없습니다 (SOVEREIGN 이상 필요).');
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
   if (!res.ok) throw new Error(`문의 목록 조회 실패 (${res.status})`);
   return res.json();
 }
 
-/**
- * GET /api/management/request/<request-ID>
- * 특정 문의사항을 조회합니다. SOVEREIGN 이상 필요.
- */
 export async function fetchManagementRequest(requestId: string): Promise<ManagementRequestResponse> {
   const res = await fetchWithAuth(`${API_BASE}/api/management/request/${encodeURIComponent(requestId)}`);
-  if (res.status === 403) throw new Error('접근 권한이 없습니다 (SOVEREIGN 이상 필요).');
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
   if (res.status === 404) throw new NotFoundError('문의사항을 찾을 수 없습니다.');
   if (!res.ok) throw new Error(`문의사항 조회 실패 (${res.status})`);
   return res.json();

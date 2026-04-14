@@ -180,14 +180,14 @@ function FeatureSection({ categoryKey, features }: SectionProps) {
 interface FeatureCardsProps {
   status: PermissionStatus;
   allowedApis: AllowedApi[];
-  permissionRoles: string[];
+  roleIds: string[];
   accountRole: string | null;
 }
 
 export default function FeatureCards({
   status,
   allowedApis,
-  permissionRoles,
+  roleIds,
   accountRole,
 }: FeatureCardsProps) {
   const isAdmin = accountRole === 'ADMIN';
@@ -242,9 +242,9 @@ export default function FeatureCards({
       {/* Header row: section label + permission role badges */}
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">사용 가능한 기능</p>
-        {permissionRoles.length > 0 && (
+        {roleIds.length > 0 && (
           <div className="flex items-center gap-1 flex-wrap justify-end">
-            {permissionRoles.map((role) => (
+            {roleIds.map((role) => (
               <span
                 key={role}
                 className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 uppercase tracking-wide"
