@@ -3,6 +3,69 @@ import { postChatMessage, streamChatSession, getChatHistory, type ChatImagePart 
 import { isOllamaOpenAICompatUrl } from '../api/openaiClient';
 import { readFileAsUtf8Stream } from '../utils/readFileAsUtf8Stream';
 
+// ── Smart thinking suppression ────────────────────────────────────────────────
+
+/**
+ * Keywords whose presence in the message signals that deep reasoning is worthwhile.
+ * Checked case-insensitively. Add new terms as needed.
+ */
+const THINKING_KEYWORDS: string[] = [
+  // Code / engineering
+  'code', 'function', 'algorithm', 'implement', 'debug', 'class', 'method',
+  'refactor', 'optimize', 'architecture', 'database', 'query', 'api',
+  'error', 'bug', 'fix', 'crash', 'exception', 'stack trace',
+  // Analysis / reasoning
+  'analyze', 'analysis', 'compare', 'evaluate', 'difference between',
+  'explain', 'how does', 'why does', 'what causes', 'reason', 'proof',
+  'calculate', 'compute', 'solve', 'step by step', 'summarize', 'summary',
+  'review', 'pros and cons', 'trade-off', 'recommend',
+  // Korean equivalents
+  '코드', '함수', '알고리즘', '구현', '디버그', '분석', '계산',
+  '설명', '차이점', '이유', '원인', '비교', '최적화',
+];
+
+/**
+ * Regex patterns that definitively mark a message as casual / conversational.
+ * Thinking mode is always suppressed when one of these matches.
+ */
+const CASUAL_PATTERNS: RegExp[] = [
+  /^(hi|hello|hey|yo|sup|thanks|thank you|thx|lol|haha|hehe|ok|okay|sure|yes|no|bye|good morning|good night)[\s!.,?]*$/i,
+  /^tell (me )?(a |another )?joke/i,
+  /^what('s| is) (your name|the time|today'?s? date)/i,
+  /^how (are you|r u|are things)/i,
+  /^(make me |give me )?(a )?(funny|short|quick) /i,
+];
+
+/**
+ * Decides whether to actually send {@code thinking: true} to the backend.
+ *
+ * Rules (evaluated in order):
+ * 1. If thinking is globally disabled → always false.
+ * 2. If the message matches a casual pattern (joke, greeting…) → false.
+ * 3. If the message is short (< 80 chars) AND contains no technical keywords → false.
+ * 4. Otherwise → respect the toggle (true).
+ *
+ * This prevents the model from spending hundreds of thinking tokens on simple
+ * conversational queries where reasoning adds no value to the user.
+ */
+export function shouldThink(message: string, thinkingEnabled: boolean): boolean {
+  if (!thinkingEnabled) return false;
+
+  const trimmed = message.trim();
+
+  // Rule 2: explicit casual patterns → never think
+  if (CASUAL_PATTERNS.some((p) => p.test(trimmed))) return false;
+
+  // Rule 3: short message — only think if a technical keyword is present
+  if (trimmed.length < 80) {
+    const lower = trimmed.toLowerCase();
+    return THINKING_KEYWORDS.some((kw) => lower.includes(kw));
+  }
+
+  // Rule 4: longer message → trust the toggle
+  return true;
+}
+
 export interface ModelOption {
   id: string;
   name: string;
@@ -10,6 +73,8 @@ export interface ModelOption {
   baseUrl?: string;
   apiKey?: string;
   isLocal: boolean;
+  /** Whether this model supports extended thinking / reasoning mode. Defaults to true when omitted. */
+  supportsThinking?: boolean;
 }
 
 /**
@@ -18,8 +83,8 @@ export interface ModelOption {
  * (e.g. qwen3.5); plain text models may error or ignore images.
  */
 export const LOCAL_MODELS: ModelOption[] = [
-  { id: 'qwen3.5:4b', name: 'qwen3.5:4b', platform: 'Ollama', isLocal: true },
-  { id: 'exaone3.5:2.4b', name: 'exaone3.5:2.4b', platform: 'Ollama', isLocal: true },
+  { id: 'qwen3.5:4b',     name: 'qwen3.5:4b',     platform: 'Ollama', isLocal: true },
+  { id: 'exaone3.5:2.4b', name: 'exaone3.5:2.4b', platform: 'Ollama', isLocal: true, supportsThinking: false },
 ];
 
 /** Default model for the composer dropdown (matches backend / Ollama default chat model). */
@@ -494,7 +559,7 @@ export function useChat() {
         const payload: Parameters<typeof postChatMessage>[0] = {
           sessionId: effectiveSessionId,
           message: built.message,
-          thinking,
+          thinking: shouldThink(built.message, thinking),
           model: model.name,
           useRag: ragMode,
         };
@@ -539,7 +604,7 @@ export function useChat() {
         const payload = {
           sessionId: effectiveSessionId,
           message: built.message,
-          thinking,
+          thinking: shouldThink(built.message, thinking),
           model: model.name,
           platform: model.platform,
           baseUrl,
@@ -691,7 +756,7 @@ export function useChat() {
       };
 
       if (model.isLocal) {
-        const payload = { sessionId, message: userMsg.content, thinking, model: model.name, useRag: ragMode };
+        const payload = { sessionId, message: userMsg.content, thinking: shouldThink(userMsg.content, thinking), model: model.name, useRag: ragMode };
         const { sessionId: newSid } = await postChatMessage(payload, controller.signal);
         setSessionId(newSid);
         for await (const event of streamChatSession(newSid, controller.signal)) {
@@ -709,7 +774,7 @@ export function useChat() {
         const payload = {
           sessionId,
           message: userMsg.content,
-          thinking,
+          thinking: shouldThink(userMsg.content, thinking),
           model: model.name,
           platform: model.platform,
           baseUrl,

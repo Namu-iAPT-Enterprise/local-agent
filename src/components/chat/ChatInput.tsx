@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowUp,
   Plus,
@@ -53,14 +54,19 @@ function FileTypeIcon({ name }: { name: string }) {
 function AttachmentChip({
   attachment,
   onRemove,
+  onOpenPreview,
   index,
 }: {
   attachment: PendingChatAttachment;
   onRemove: () => void;
+  onOpenPreview: () => void;
   index: number;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const isImage = attachment.kind === 'image' && attachment.previewUrl && !imgFailed;
+  const canPreview =
+    (attachment.kind === 'image' && attachment.previewUrl && !imgFailed) ||
+    (attachment.kind === 'file' && attachment.text);
 
   if (attachment.status === 'loading') {
     return (
@@ -74,38 +80,111 @@ function AttachmentChip({
 
   return (
     <div
-      className="group flex-shrink-0 flex items-center gap-1.5 h-8 pl-1 pr-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-500 transition-colors max-w-[160px]"
-      title={attachment.name}
+      className={`group flex-shrink-0 flex items-center gap-1.5 h-8 pl-1 pr-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-500 transition-colors max-w-[160px] ${
+        canPreview ? 'cursor-pointer' : ''
+      }`}
+      title={canPreview ? `${attachment.name} — click to preview` : attachment.name}
     >
-      {/* Thumbnail or icon */}
-      {isImage ? (
-        <div className="flex-shrink-0 h-6 w-6 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-700">
-          <img
-            src={attachment.previewUrl}
-            alt=""
-            className="h-full w-full object-cover"
-            onError={() => setImgFailed(true)}
-          />
-        </div>
-      ) : (
-        <div className="flex-shrink-0 h-6 w-6 rounded-md flex items-center justify-center bg-gray-100 dark:bg-gray-700">
-          <FileTypeIcon name={attachment.name} />
-        </div>
-      )}
-      {/* Filename */}
-      <span className="min-w-0 flex-1 text-xs text-gray-600 dark:text-gray-300 truncate leading-none">
-        {attachment.name}
-      </span>
-      {/* Remove */}
       <button
         type="button"
-        onClick={onRemove}
+        disabled={!canPreview}
+        onClick={() => canPreview && onOpenPreview()}
+        className="flex min-w-0 flex-1 items-center gap-1.5 text-left disabled:cursor-default"
+      >
+        {isImage ? (
+          <div className="flex-shrink-0 h-6 w-6 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-700">
+            <img
+              src={attachment.previewUrl}
+              alt=""
+              className="h-full w-full object-cover pointer-events-none"
+              onError={() => setImgFailed(true)}
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        ) : (
+          <div className="flex-shrink-0 h-6 w-6 rounded-md flex items-center justify-center bg-gray-100 dark:bg-gray-700">
+            <FileTypeIcon name={attachment.name} />
+          </div>
+        )}
+        <span className="min-w-0 flex-1 text-xs text-gray-600 dark:text-gray-300 truncate leading-none">
+          {attachment.name}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
         className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
         aria-label={`Remove ${attachment.name}`}
       >
         <X size={11} strokeWidth={2.5} />
       </button>
     </div>
+  );
+}
+
+function AttachmentPreviewModal({
+  attachment,
+  onClose,
+}: {
+  attachment: PendingChatAttachment;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const body =
+    attachment.kind === 'image' && attachment.previewUrl ? (
+      <img
+        src={attachment.previewUrl}
+        alt=""
+        className="max-h-[min(70vh,560px)] max-w-full object-contain rounded-lg shadow-lg"
+        referrerPolicy="no-referrer"
+      />
+    ) : attachment.kind === 'file' && attachment.text ? (
+      <pre className="max-h-[min(70vh,560px)] w-full max-w-2xl overflow-auto rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 p-4 text-left text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
+        {attachment.text}
+      </pre>
+    ) : (
+      <p className="text-sm text-gray-500 dark:text-gray-400">No preview available for this attachment.</p>
+    );
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/55 backdrop-blur-[1px]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Attachment preview"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-[90vh] max-w-[min(96vw,720px)] flex-col items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 p-4 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex w-full items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-700 pb-2">
+          <span className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+            {attachment.name}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            aria-label="Close preview"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex max-h-[min(75vh,600px)] justify-center overflow-auto">{body}</div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -123,6 +202,7 @@ export function ChatInput({
   onSend, onStop, onKeyDown, placeholder,
 }: ChatInputProps) {
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<PendingChatAttachment | null>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const chatImageInputRef = useRef<HTMLInputElement>(null);
 
@@ -194,6 +274,7 @@ export function ChatInput({
                 key={a.id}
                 attachment={a}
                 onRemove={() => onRemovePendingAttachment(a.id)}
+                onOpenPreview={() => setPreviewAttachment(a)}
                 index={idx}
               />
             ))}
@@ -269,19 +350,21 @@ export function ChatInput({
             <span className="hidden sm:inline">Knowledge</span>
           </button>
 
-          <button
-            type="button"
-            onClick={onThinkingToggle}
-            title={thinkingMode ? 'Thinking mode ON' : 'Thinking mode OFF'}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-              thinkingMode
-                ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400'
-                : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-          >
-            <Brain size={13} />
-            <span className="hidden sm:inline">Thinking</span>
-          </button>
+          {selectedModel.supportsThinking !== false && (
+            <button
+              type="button"
+              onClick={onThinkingToggle}
+              title={thinkingMode ? 'Thinking mode ON' : 'Thinking mode OFF'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                thinkingMode
+                  ? 'border-purple-400 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400'
+                  : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              <Brain size={13} />
+              <span className="hidden sm:inline">Thinking</span>
+            </button>
+          )}
 
           {isStreaming ? (
             <button
@@ -304,6 +387,12 @@ export function ChatInput({
           )}
         </div>
       </div>
+      {previewAttachment && (
+        <AttachmentPreviewModal
+          attachment={previewAttachment}
+          onClose={() => setPreviewAttachment(null)}
+        />
+      )}
     </div>
   );
 }
