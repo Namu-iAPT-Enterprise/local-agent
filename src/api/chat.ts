@@ -47,16 +47,45 @@ export interface StreamEvent {
   data: string;
 }
 
+/** Binary image parts for multipart POST (avoids huge JSON base64 and 413 on gateways). */
+export interface ChatImagePart {
+  blob: Blob;
+  filename: string;
+}
+
 // ── API functions ─────────────────────────────────────────────────────────────
 
 /**
  * POST /api/chat/message
  * Start a new message or continue an existing session.
+ * When {@code imageParts} is set, sends {@code multipart/form-data} (field {@code payload} + {@code images})
+ * so the browser streams image bytes instead of embedding base64 in JSON.
  */
 export async function postChatMessage(
   req: SendMessageRequest,
   signal?: AbortSignal,
+  imageParts?: ChatImagePart[],
 ): Promise<SendMessageResponse> {
+  if (imageParts && imageParts.length > 0) {
+    const form = new FormData();
+    const { images: _drop, ...rest } = req;
+    form.append('payload', JSON.stringify({ ...rest, images: null }));
+    for (const { blob, filename } of imageParts) {
+      form.append('images', blob, filename);
+    }
+    const res = await fetchWithAuth(`${BASE}/api/chat/message`, {
+      method: 'POST',
+      body: form,
+      signal,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      const suffix = detail ? `: ${detail.slice(0, 300)}` : '';
+      throw new Error(`Server returned ${res.status}${suffix}`);
+    }
+    return res.json();
+  }
+
   const res = await fetchWithAuth(`${BASE}/api/chat/message`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

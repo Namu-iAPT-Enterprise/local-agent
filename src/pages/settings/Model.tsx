@@ -199,7 +199,7 @@ function ModelModal({ initial, onClose, onSave }: ModalProps) {
                   platform === 'OpenAI' ? 'e.g. gpt-4o' :
                   platform === 'Anthropic' ? 'e.g. claude-sonnet-4-6' :
                   platform === 'Gemini' ? 'e.g. gemini-2.0-flash' :
-                  platform === 'Ollama' ? 'e.g. qwen3‑vl:4b' : 'Model name'
+                  platform === 'Ollama' ? 'e.g. qwen3.5:4b' : 'Model name'
                 }
                 className="flex-1 bg-transparent text-sm text-gray-700 dark:text-gray-200 outline-none"
               />

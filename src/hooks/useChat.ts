@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
-import { postChatMessage, streamChatSession, getChatHistory } from '../api/chat';
+import { postChatMessage, streamChatSession, getChatHistory, type ChatImagePart } from '../api/chat';
 import { isOllamaOpenAICompatUrl } from '../api/openaiClient';
+import { readFileAsUtf8Stream } from '../utils/readFileAsUtf8Stream';
 
 export interface ModelOption {
   id: string;
@@ -11,11 +12,34 @@ export interface ModelOption {
   isLocal: boolean;
 }
 
-/** Ollama tags from `ollama list` (chat models). Embedding models (e.g. nomic-embed-text) are omitted. */
+/**
+ * Ollama tags from `ollama list` (chat models). Embedding models (e.g. nomic-embed-text) are omitted.
+ * Image attachments are only sent to the model when a local model is selected — pick a vision-capable tag
+ * (e.g. qwen3.5); plain text models may error or ignore images.
+ */
 export const LOCAL_MODELS: ModelOption[] = [
-  { id: 'qwen3-vl:4b', name: 'qwen3-vl:4b', platform: 'Ollama', isLocal: true },
+  { id: 'qwen3.5:4b', name: 'qwen3.5:4b', platform: 'Ollama', isLocal: true },
   { id: 'exaone3.5:2.4b', name: 'exaone3.5:2.4b', platform: 'Ollama', isLocal: true },
 ];
+
+/** Default model for the composer dropdown (matches backend / Ollama default chat model). */
+export const DEFAULT_LOCAL_MODEL: ModelOption =
+  LOCAL_MODELS.find((m) => m.name === 'qwen3.5:4b') ?? LOCAL_MODELS[0];
+
+/** Resolve `namu_selected_model` from localStorage: API models pass through; local models must exist in {@link LOCAL_MODELS}. */
+export function resolveStoredSelectedModel(raw: string | null): ModelOption {
+  if (!raw) return DEFAULT_LOCAL_MODEL;
+  try {
+    const parsed = JSON.parse(raw) as ModelOption;
+    if (parsed.isLocal) {
+      const match = LOCAL_MODELS.find((m) => m.id === parsed.id || m.name === parsed.name);
+      return match ?? DEFAULT_LOCAL_MODEL;
+    }
+    return parsed;
+  } catch {
+    return DEFAULT_LOCAL_MODEL;
+  }
+}
 
 export interface AssistantVariant {
   content: string;
@@ -31,8 +55,10 @@ export interface PendingChatAttachment {
   status?: 'loading' | 'ready';
   /** `URL.createObjectURL` — revoke after send or remove */
   previewUrl?: string;
-  /** Raw base64 (no data-URL prefix) for `images` on POST */
+  /** Raw base64 (no data-URL prefix); fallback when multipart upload is not used */
   base64?: string;
+  /** Compressed image bytes for multipart POST (same pixels as base64, smaller on the wire than JSON base64) */
+  imageBlob?: Blob;
   /** UTF-8 text for small text files */
   text?: string;
 }
@@ -61,8 +87,94 @@ export interface Message {
 }
 
 const MAX_VISION_IMAGES = 6;
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // raw file limit before compression
 const MAX_TEXT_FILE_BYTES = 400 * 1024;
+
+/** Max long-edge (px) for the compressed image sent to the vision model. */
+const COMPRESS_MAX_PX = 1024;
+/** JPEG quality for compressed output (0–1). */
+const COMPRESS_QUALITY = 0.82;
+/**
+ * Hard cap on base64 character length per image so the JSON POST stays under strict
+ * ~2MB gateway limits (base64 + message + session fields). ~950k chars ≈ ~1.4MB JSON segment.
+ */
+const MAX_BASE64_CHARS_PER_IMAGE = 950_000;
+
+function base64ToBlob(b64: string, mime: string): Blob {
+  const bin = atob(b64);
+  const n = bin.length;
+  const u8 = new Uint8Array(n);
+  for (let i = 0; i < n; i++) u8[i] = bin.charCodeAt(i);
+  return new Blob([u8], { type: mime || 'image/jpeg' });
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Image load failed'));
+    img.src = src;
+  });
+}
+
+/**
+ * Compress an image file using an offscreen Canvas and return a raw base64
+ * string (no data-URL prefix) suitable for the `images` field of the API.
+ *
+ * - Scales the image down so the long edge ≤ COMPRESS_MAX_PX (and further if needed to stay under MAX_BASE64_CHARS_PER_IMAGE).
+ * - Encodes as JPEG when possible; PNG only when type requires transparency.
+ * - Falls back to FileReader if canvas path fails (e.g. some SVG).
+ */
+async function compressImageToBase64(file: File): Promise<string> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await loadImageElement(objectUrl);
+    let usePng = file.type === 'image/png';
+    let scale = 1;
+    let quality = COMPRESS_QUALITY;
+    let lastB64 = '';
+
+    for (let attempt = 0; attempt < 14; attempt++) {
+      const sw = Math.max(1, Math.round(img.naturalWidth * scale));
+      const sh = Math.max(1, Math.round(img.naturalHeight * scale));
+      let width = sw;
+      let height = sh;
+      const longEdge = Math.max(width, height);
+      if (longEdge > COMPRESS_MAX_PX) {
+        const r = COMPRESS_MAX_PX / longEdge;
+        width = Math.max(1, Math.round(width * r));
+        height = Math.max(1, Math.round(height * r));
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D context unavailable');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const mimeType = usePng ? 'image/png' : 'image/jpeg';
+      const dataUrl = canvas.toDataURL(mimeType, usePng ? undefined : quality);
+      const comma = dataUrl.indexOf(',');
+      const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      lastB64 = b64;
+
+      if (b64.length <= MAX_BASE64_CHARS_PER_IMAGE || scale <= 0.12) {
+        return b64;
+      }
+      if (usePng && attempt >= 4 && b64.length > MAX_BASE64_CHARS_PER_IMAGE) {
+        usePng = false;
+        quality = 0.72;
+        continue;
+      }
+      scale *= 0.88;
+      quality = Math.max(0.38, quality - 0.07);
+    }
+    return lastB64;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 /** macOS / Electron often leave `file.type` empty; use extension so images aren't misread as text (400KB cap). */
 const IMAGE_NAME_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|heic|heif|avif|tiff?)$/i;
@@ -126,7 +238,7 @@ function buildOutgoing(
   const visionImages = model.isLocal ? imageB64.slice(0, MAX_VISION_IMAGES) : [];
   if (!model.isLocal && pending?.some((p) => p.kind === 'image' && p.status !== 'loading')) {
     const n = pending.filter((p) => p.kind === 'image' && p.status !== 'loading').length;
-    message += `\n\n[${n} image(s) were attached — use a local vision model (e.g. qwen3-vl) to analyze images.]`;
+    message += `\n\n[${n} image(s) were attached — use a local vision model (e.g. qwen3.5) to analyze images.]`;
   }
   if (!message.trim() && visionImages.length) message = '(see attached image(s))';
   return {
@@ -144,23 +256,46 @@ export async function readSingleFileAsAttachment(
     if (file.size > MAX_IMAGE_BYTES) {
       return { error: `${getFileBasename(file)}: image too large (max ${MAX_IMAGE_BYTES / 1024 / 1024}MB)` };
     }
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result as string);
-      r.onerror = () => reject(r.error);
-      r.readAsDataURL(file);
-    });
-    const comma = dataUrl.indexOf(',');
-    const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
     const displayName = getFileBasename(file);
+    // Create preview from original file (full quality for display)
+    let previewUrl: string;
+    try {
+      previewUrl = URL.createObjectURL(file);
+    } catch {
+      return { error: `${displayName}: could not create preview` };
+    }
+    // Compress image before base64-encoding for the API payload
+    let base64: string;
+    try {
+      base64 = await compressImageToBase64(file);
+    } catch {
+      // Fallback: read raw if canvas compression fails (e.g. SVG, non-raster)
+      try {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result as string);
+          r.onerror = () => reject(r.error ?? new Error('FileReader failed'));
+          r.readAsDataURL(file);
+        });
+        const comma = dataUrl.indexOf(',');
+        base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      } catch {
+        URL.revokeObjectURL(previewUrl);
+        return { error: `${displayName}: could not read image data` };
+      }
+    }
+    const outMime =
+      file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
+    const imageBlob = base64ToBlob(base64, outMime);
     return {
       attachment: {
         id,
         kind: 'image',
         name: displayName,
         status: 'ready',
-        previewUrl: URL.createObjectURL(file),
+        previewUrl,
         base64,
+        imageBlob,
       },
     };
   }
@@ -169,7 +304,7 @@ export async function readSingleFileAsAttachment(
     return { error: `${displayName}: file too large (max ${MAX_TEXT_FILE_BYTES / 1024}KB)` };
   }
   try {
-    const text = await file.text();
+    const text = await readFileAsUtf8Stream(file);
     return { attachment: { id, kind: 'file', name: displayName, status: 'ready', text } };
   } catch {
     return { error: `${displayName}: could not read as text` };
@@ -283,7 +418,7 @@ export function useChat() {
   const send = async (
     text: string,
     thinking = false,
-    model: ModelOption = LOCAL_MODELS[0],
+    model: ModelOption = DEFAULT_LOCAL_MODEL,
     ragMode = true,
     pending?: PendingChatAttachment[],
   ) => {
@@ -363,8 +498,23 @@ export function useChat() {
           model: model.name,
           useRag: ragMode,
         };
-        if (built.images?.length) payload.images = built.images;
-        const { sessionId: newSessionId } = await postChatMessage(payload, controller.signal);
+        const nVision = built.images?.length ?? 0;
+        const imageParts: ChatImagePart[] | undefined =
+          nVision > 0 && pending
+            ? pending
+                .filter((p) => p.kind === 'image' && p.status !== 'loading' && p.imageBlob)
+                .map((p) => ({ blob: p.imageBlob!, filename: p.name }))
+            : undefined;
+        const useMultipart =
+          nVision > 0 && imageParts && imageParts.length === nVision;
+        if (nVision > 0 && !useMultipart) {
+          payload.images = built.images;
+        }
+        const { sessionId: newSessionId } = await postChatMessage(
+          payload,
+          controller.signal,
+          useMultipart ? imageParts : undefined,
+        );
         setSessionId(newSessionId);
         saveSessionModel(newSessionId, model);
 
@@ -421,9 +571,9 @@ export function useChat() {
         return [...prev, { role: 'assistant', content: errMsg, error: true }];
       });
     } finally {
-      pending?.forEach((p) => {
-        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-      });
+      // Do not revoke pending previewUrls here: the same blob URLs are copied onto the
+      // user message’s attachments for UserMessage thumbnails; revoking would break
+      // <img src={blob:…}> in the thread. Revoke on clear() / removePendingAttachment only.
       abortRef.current = null;
       setIsStreaming(false);
     }
@@ -498,7 +648,7 @@ export function useChat() {
   const regenerate = async (
     targetIdx: number,
     thinking = false,
-    model: ModelOption = LOCAL_MODELS[0],
+    model: ModelOption = DEFAULT_LOCAL_MODEL,
     ragMode = true,
   ) => {
     if (isStreaming) return;

@@ -5,6 +5,7 @@ import {
   AlertCircle, Loader, FolderOpen, X, Tag, AlignLeft, Shield,
 } from 'lucide-react';
 import { RAG_INGEST_URL, RAG_INGEST_BATCH_URL } from '../../config/apiBase';
+import { ingestTextStream } from '../../api/rag';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -216,7 +217,8 @@ export default function Knowledge() {
 
   // File upload
   const [selectedFiles,       setSelectedFiles]       = useState<string[]>([]);
-  const [fileContents,        setFileContents]        = useState<Map<string, string>>(new Map());
+  /** Browser-selected File objects (key: basename) — used for chunked HTTP ingest without reading whole file into memory. */
+  const [browserFiles,        setBrowserFiles]        = useState<Map<string, File>>(new Map());
   const [fileVisibility,      setFileVisibility]      = useState('PUBLIC');
   const [fileCategory,        setFileCategory]        = useState('');
   const [fileCustomCategory,  setFileCustomCategory]  = useState('');
@@ -227,28 +229,22 @@ export default function Knowledge() {
 
   // ── File reading helpers ────────────────────────────────────────────────────
 
-  const readBrowserFiles = async (files: File[]) => {
+  const readBrowserFiles = (files: File[]) => {
     const names: string[] = [];
-    const map = new Map<string, string>();
+    const map = new Map<string, File>();
     for (const file of files) {
-      const content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsText(file);
-      });
       names.push(file.name);
-      map.set(file.name, content);
+      map.set(file.name, file);
     }
     setSelectedFiles(prev => [...prev, ...names]);
-    setFileContents(prev => new Map([...prev, ...map]));
+    setBrowserFiles(prev => new Map([...prev, ...map]));
     setFileResult({ status: 'idle' });
   };
 
-  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    await readBrowserFiles(Array.from(files));
+    readBrowserFiles(Array.from(files));
     e.target.value = '';
   };
 
@@ -256,7 +252,7 @@ export default function Knowledge() {
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) await readBrowserFiles(files);
+    if (files.length > 0) readBrowserFiles(files);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDragOver  = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(true); };
@@ -281,9 +277,8 @@ export default function Knowledge() {
   const removeFile = (filePath: string) => {
     const name = filePath.split(/[\\/]/).pop() || filePath;
     setSelectedFiles(prev => prev.filter(f => f !== filePath));
-    setFileContents(prev => {
+    setBrowserFiles(prev => {
       const m = new Map(prev);
-      m.delete(filePath);
       m.delete(name);
       return m;
     });
@@ -362,51 +357,64 @@ export default function Knowledge() {
     setFileResult({ status: 'idle' });
     try {
       const baseMetadata = buildMetadata(fileVisibility, fileCategory, fileCustomCategory);
-      const docs: { text: string; metadata: Record<string, unknown> }[] = [];
+      const electronDocs: { text: string; metadata: Record<string, unknown> }[] = [];
+      let streamedCount = 0;
 
       for (const filePath of selectedFiles) {
         const fileName = filePath.split(/[\\/]/).pop() || filePath;
 
-        // Browser upload: content already read into fileContents map
-        const browserContent = fileContents.get(filePath) ?? fileContents.get(fileName);
-        if (browserContent !== undefined) {
-          docs.push({ text: browserContent, metadata: { ...baseMetadata, source: fileName } });
+        const browserFile = browserFiles.get(fileName);
+        if (browserFile) {
+          const res = await ingestTextStream(browserFile, { ...baseMetadata, source: fileName });
+          if (!res.ok) {
+            const err = await res.text();
+            setFileResult({ status: 'error', message: `Something went wrong: ${formatIngestHttpError(res, err)}` });
+            return;
+          }
+          streamedCount++;
           continue;
         }
 
-        // Electron: read via native API
         if (window.electronAPI?.readFile) {
           const result = await window.electronAPI.readFile(filePath);
           if (result.success && result.content) {
-            docs.push({ text: result.content, metadata: { ...baseMetadata, source: fileName, filePath } });
+            electronDocs.push({ text: result.content, metadata: { ...baseMetadata, source: fileName, filePath } });
           }
         }
       }
 
-      if (docs.length === 0) {
+      let batchCount = 0;
+      if (electronDocs.length > 0) {
+        const res = await fetch(RAG_INGEST_BATCH_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(electronDocs),
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          setFileResult({ status: 'error', message: `Something went wrong: ${formatIngestHttpError(res, err)}` });
+          return;
+        }
+        const data = await res.json() as { count?: number };
+        batchCount = typeof data.count === 'number' ? data.count : electronDocs.length;
+      }
+
+      const total = streamedCount + batchCount;
+      if (total === 0) {
         setFileResult({ status: 'error', message: 'No files could be read. Make sure they are plain text files (.txt, .md, .csv, etc.).' });
-        setFileLoading(false);
         return;
       }
 
-      const res = await fetch(RAG_INGEST_BATCH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(docs),
+      setFileResult({
+        status: 'success',
+        message: `${total} file${total !== 1 ? 's' : ''} added successfully!`,
+        count: total,
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        setFileResult({ status: 'success', message: `${data.count} file${data.count !== 1 ? 's' : ''} added successfully!`, count: data.count });
-        setSelectedFiles([]);
-        setFileContents(new Map());
-        setFileVisibility('PUBLIC');
-        setFileCategory('');
-        setFileCustomCategory('');
-      } else {
-        const err = await res.text();
-        setFileResult({ status: 'error', message: `Something went wrong: ${formatIngestHttpError(res, err)}` });
-      }
+      setSelectedFiles([]);
+      setBrowserFiles(new Map());
+      setFileVisibility('PUBLIC');
+      setFileCategory('');
+      setFileCustomCategory('');
     } catch (err) {
       setFileResult({ status: 'error', message: `Could not connect to server: ${err instanceof Error ? err.message : 'Unknown error'}` });
     } finally {

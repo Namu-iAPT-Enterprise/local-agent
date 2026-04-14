@@ -30,6 +30,8 @@ export const RAG_BASE = rawRag.replace(/\/$/, '');
 
 export const RAG_INGEST_URL = `${RAG_BASE}/rag/ingest`;
 export const RAG_INGEST_BATCH_URL = `${RAG_BASE}/rag/ingest/batch`;
+/** Chunked plain-text upload; metadata JSON in the X-Ingest-Metadata header. */
+export const RAG_INGEST_STREAM_URL = `${RAG_BASE}/rag/ingest/stream`;
 
 export function ragQueryUrl(q: string): string {
   return `${RAG_BASE}/rag/query?q=${encodeURIComponent(q)}`;
