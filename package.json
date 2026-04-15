@@ -12,7 +12,11 @@
     "make": "electron-forge make",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
-    "rag:test-kb": "node scripts/rag-ingest-and-test.mjs"
+    "rag:test-kb": "node scripts/rag-ingest-and-test.mjs",
+    "hwpx:server": "bash ../hwpx-server/run-server.sh",
+    "hwpx-server": "npm run hwpx:server",
+    "hwpx:e2e": "bash ../hwpx-server/run-e2e.sh",
+    "hwpx:e2e:all": "bash ../scripts/e2e-hwpx.sh"
   },
   "keywords": [],
   "author": {
@@ -58,6 +62,7 @@
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
-    "tailwindcss": "^4.2.2"
+    "tailwindcss": "^4.2.2",
+    "xlsx": "^0.18.5"
   }
 }

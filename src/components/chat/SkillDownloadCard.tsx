@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { markdownToDocxBlob, extractMarkdownTitle, downloadBlob } from '../../utils/markdownToDocx';
 import { markdownToPptxBlob, extractPresentationTitle } from '../../utils/markdownToPptx';
+import { markdownToXlsxBlob } from '../../utils/markdownToXlsx';
+import { markdownToHwpxBlob } from '../../utils/markdownToHwpx';
 
 interface SkillDownloadCardProps {
   content: string;
-  skillType: 'docx' | 'pptx' | 'xlsx' | 'pdf';
+  skillType: 'docx' | 'pptx' | 'xlsx' | 'pdf' | 'hwpx';
 }
 
 const SKILL_META = {
@@ -45,6 +47,15 @@ const SKILL_META = {
     border: 'border-purple-200 dark:border-purple-800/50',
     btnBg: 'bg-purple-600 hover:bg-purple-700',
   },
+  hwpx: {
+    icon: '🔤',
+    label: '한글 HWPX (.hwpx)',
+    ext: '.hwpx',
+    color: 'text-sky-700 dark:text-sky-300',
+    bg: 'bg-sky-50 dark:bg-sky-950/30',
+    border: 'border-sky-200 dark:border-sky-800/50',
+    btnBg: 'bg-sky-600 hover:bg-sky-700',
+  },
 } as const;
 
 export function SkillDownloadCard({ content, skillType }: SkillDownloadCardProps) {
@@ -60,13 +71,14 @@ export function SkillDownloadCard({ content, skillType }: SkillDownloadCardProps
       : extractMarkdownTitle(content, 'document');
 
   const safeFilename = rawTitle
-    .replace(/[^\w\s\-]/g, '')
+    .replace(/[^\w\s-]/g, '')
     .trim()
     .replace(/\s+/g, '-')
     .toLowerCase()
     .slice(0, 60) || skillType;
 
-  const filename = `${safeFilename}${meta.ext}`;
+  const filename =
+    skillType === 'pdf' ? `${safeFilename}.docx` : `${safeFilename}${meta.ext}`;
 
   const handleDownload = async () => {
     if (downloading) return;
@@ -77,10 +89,14 @@ export function SkillDownloadCard({ content, skillType }: SkillDownloadCardProps
 
       if (skillType === 'docx') {
         blob = await markdownToDocxBlob(content);
+      } else if (skillType === 'hwpx') {
+        blob = await markdownToHwpxBlob(content);
       } else if (skillType === 'pptx') {
         blob = await markdownToPptxBlob(content);
+      } else if (skillType === 'xlsx') {
+        blob = await markdownToXlsxBlob(content);
       } else {
-        // xlsx / pdf: fall back to docx-based approach for now
+        // pdf: still generated as Word until a PDF renderer is added
         blob = await markdownToDocxBlob(content);
       }
 

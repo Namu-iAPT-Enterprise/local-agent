@@ -13,6 +13,10 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE?: string;
   /** Optional override for `/rag/*` when the gateway proxies `/api` but not `/rag` (defaults to `VITE_API_BASE`). */
   readonly VITE_RAG_BASE?: string;
+  /**
+   * Base URL for the HWPX converter (POST /convert). In dev, Vite proxies `/hwpx-converter` to :8789 when unset.
+   */
+  readonly VITE_HWPX_CONVERTER_URL?: string;
 }
 
 interface Window {

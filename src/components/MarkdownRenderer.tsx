@@ -6,6 +6,7 @@ import { oneLight, oneDark } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { Copy, Check } from 'lucide-react';
 import type { Components } from 'react-markdown';
 import type { Element as HastElement, Text as HastText } from 'hast';
+import { fixGfmTableGlue } from '../utils/markdownTableNormalize';
 
 // ── Language display name ──────────────────────────────────────────────────
 
@@ -381,14 +382,7 @@ function applyOutsideCodeFences(text: string, fn: (chunk: string) => string): st
  * or glue "intro text:| # | header..." without a line break before the table.
  */
 function fixMarkdownTables(text: string): string {
-  return applyOutsideCodeFences(text, (s) => {
-    let t = s;
-    // "…format:| # | Word |" → blank line before table
-    t = t.replace(/:\s*\|\s*#\s*\|/g, ':\n\n| # |');
-    // "| … || :--- |" or "| … || 1 | …" → row break (double pipe → pipe + newline + pipe)
-    t = t.replace(/\|\|\s*(?=\s*(?::\s*-|\d+\s*\|))/g, '|\n|');
-    return t;
-  });
+  return applyOutsideCodeFences(text, fixGfmTableGlue);
 }
 
 /**

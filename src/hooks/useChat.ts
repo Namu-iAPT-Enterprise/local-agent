@@ -150,7 +150,7 @@ export interface Message {
   /** Images / file chips for user messages */
   attachments?: UserAttachmentDisplay[];
   /** When set, the response was triggered by a slash-skill and should render a download card */
-  skillType?: 'docx' | 'pptx' | 'xlsx' | 'pdf';
+  skillType?: 'docx' | 'pptx' | 'xlsx' | 'pdf' | 'hwpx';
 }
 
 const MAX_VISION_IMAGES = 6;
@@ -564,9 +564,9 @@ export function useChat() {
             }))
         : undefined;
 
-    // Detect slash-skill trigger (e.g. "/docx", "/pptx", "/xlsx", "/pdf")
+    // Detect slash-skill trigger (e.g. "/docx", "/pptx", "/xlsx", "/pdf", "/hwpx")
     const slashMatch = /^\/(\w+)/.exec(userCaption);
-    const detectedSkill = (['docx', 'pptx', 'xlsx', 'pdf'] as const).find(
+    const detectedSkill = (['docx', 'pptx', 'xlsx', 'pdf', 'hwpx'] as const).find(
       (s) => slashMatch?.[1]?.toLowerCase() === s,
     );
 
@@ -577,6 +577,8 @@ export function useChat() {
       pptx: 'You are creating a PowerPoint presentation. Structure your response as Markdown:\n- Use "# Title" for the presentation title (first line only)\n- Use "## Slide Title" for each slide (one ## per slide)\n- Under each slide, use bullet points (- item) for content\n- Keep bullets short (one idea per bullet, max ~8 words)\n- Aim for 5–10 slides total\n- Do NOT include any prose outside the structure — output only the slide content.',
       xlsx: 'You are creating an Excel spreadsheet. Respond with Markdown tables representing the spreadsheet data.',
       pdf:  'You are creating a PDF document. Respond with well-structured Markdown.',
+      hwpx:
+        'You are drafting content suitable for a Korean 한글 / HWPX document (보고서, 공문, 기안문). Follow the hwpx skill: clear # 제목, **강조**, bullet/numbered lists, formal tone where appropriate. Output only the document body in Markdown — no meta commentary. The download card builds a real .hwpx (python-hwpx + namespace fix) via the local converter service.',
     };
 
     let effectiveApiCaption = apiCaption;
