@@ -33,6 +33,17 @@ export interface RoleGetResponse {
   permissionTags: string[];
 }
 
+// ── Permission Tag types ──────────────────────────────────────────────────
+
+export interface PermissionTagDto {
+  tagId: string;
+  displayName: string;
+  category: string;
+  description?: string;
+  scope: 'GLOBAL' | 'TEAM_SCOPED';
+  system: boolean;
+}
+
 // ── Role Definition types ─────────────────────────────────────────────────────
 
 export interface RoleDefinitionDto {
@@ -127,6 +138,29 @@ export async function reloadAllPermissionCache(): Promise<void> {
     method: 'POST'
   });
   if (!res.ok) throw new Error(`전체 캐시 새로고침 실패 (${res.status})`);
+}
+
+// ── Permission Tags ──────────────────────────────────────────────────────
+
+/**
+ * GET /api/management/role/tags
+ * Returns all permission tag definitions for role editing UI.
+ */
+export async function fetchPermissionTags(): Promise<PermissionTagDto[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/tags`);
+  if (!res.ok) throw new Error(`권한 태그 목록 조회 실패 (${res.status})`);
+  return res.json();
+}
+
+/**
+ * GET /api/management/role/define/{roleId}
+ * Returns a single role definition with full details (permissionTagIds, manageableByRoleIds).
+ */
+export async function fetchRoleDefinition(roleId: string): Promise<RoleDefinitionDto> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define/${encodeURIComponent(roleId)}`);
+  if (res.status === 404) throw new NotFoundError(`역할 정의 없음: ${roleId}`);
+  if (!res.ok) throw new Error(`역할 정의 조회 실패 (${res.status})`);
+  return res.json();
 }
 
 // ── Role Definition management ────────────────────────────────────────────────

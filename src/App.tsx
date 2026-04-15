@@ -197,7 +197,7 @@ export default function App() {
   // 계정 레벨 ADMIN 이거나 역할 정의 권한이 있으면 관리 페이지 접근 허용
   const hasAdminAccess = accountRole === 'ADMIN' || permissions.enabledFeatures.includes('ROLE_DEFINE_CREATE');
   // 역할 배정/조회/정의/팀/캐시 권한 중 하나라도 있으면 admin-users 페이지 진입 허용
-  const hasAdminUsersAccess = hasAdminAccess || ['ROLE_VIEW_ANY','ROLE_ASSIGN_ANY','ROLE_REVOKE_ANY','ROLE_CREATE','ROLE_MODIFY','ROLE_DELETE','TEAM_VIEW_ANY','TEAM_CREATE','TEAM_MANAGE_ANY','TEAM_DELETE_ANY','CACHE_RELOAD_USER','CACHE_RELOAD_ALL'].some(t => permissions.permissionTags.includes(t));
+  const hasAdminUsersAccess = hasAdminAccess || ['ROLE_VIEW_ANY','ROLE_VIEW_OWN','ROLE_ASSIGN_ANY','ROLE_ASSIGN_OWN','ROLE_REVOKE_ANY','ROLE_REVOKE_OWN','ROLE_CREATE','ROLE_CREATE_OWN','ROLE_MODIFY','ROLE_MODIFY_OWN','ROLE_DELETE','ROLE_DELETE_OWN','TEAM_VIEW_ANY','TEAM_CREATE','TEAM_MANAGE_ANY','TEAM_MANAGE_OWN','TEAM_DELETE_ANY','TEAM_DELETE_OWN','CACHE_RELOAD_USER','CACHE_RELOAD_ALL'].some(t => permissions.permissionTags.includes(t));
   // 문의사항 조회 권한
   const hasRequestsAccess = hasAdminAccess || permissions.enabledFeatures.includes('REQUEST_VIEW_ALL');
   // 지식 관리 권한
