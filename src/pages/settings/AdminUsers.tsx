@@ -250,19 +250,21 @@ function PermissionTagEditor({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[11px] font-bold text-gray-700 dark:text-gray-300">{tag.tagId}</span>
+            <span className="text-[12px] font-semibold text-gray-800 dark:text-gray-100 truncate">{tag.displayName || tag.tagId}</span>
             {isGlobal && (
-              <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-indigo-50 text-indigo-500 dark:bg-indigo-900/30 dark:text-indigo-400 flex items-center gap-0.5">
+              <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-indigo-50 text-indigo-500 dark:bg-indigo-900/30 dark:text-indigo-400 flex items-center gap-0.5 flex-shrink-0">
                 <Globe size={7} />GLOBAL
               </span>
             )}
             {isLocked && (
-              <span className="text-[8px] text-gray-400 flex items-center gap-0.5">
+              <span className="text-[8px] text-gray-400 flex items-center gap-0.5 flex-shrink-0">
                 <Lock size={7} />관리 권한 필요
               </span>
             )}
           </div>
-          <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{tag.displayName}{tag.description ? ` — ${tag.description}` : ''}</p>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate font-mono">
+            {tag.tagId}{tag.description ? ` | ${tag.description}` : ''}
+          </p>
         </div>
       </div>
     );
@@ -754,7 +756,7 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
   const canModify = can(tags, 'GLOBAL_ROLE_MODIFY', 'ROLE_MODIFY_OWN');
   const canDelete = can(tags, 'GLOBAL_ROLE_DELETE', 'ROLE_DELETE_OWN');
   const canAssignAdmin = can(tags, 'GLOBAL_ROLE_PERMISSION_ASSIGN');
-  const canAssignPerm = canCreate || canModify || can(tags, 'ROLE_PERMISSION_ASSIGN', 'GLOBAL_ROLE_PERMISSION_ASSIGN');
+  const canAssignPerm = canCreate || canModify;
 
   const [creating, setCreating]   = useState(false);
   const [editingId, setEditingId] = useState<string|null>(null);

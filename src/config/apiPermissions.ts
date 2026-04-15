@@ -3,17 +3,18 @@ import {
   Users, HardDrive, ScrollText,
   MessageSquare as ChatIcon, Upload, FolderOpen,
   BookPlus, FileEdit, Trash2 as TrashIcon,
-  Megaphone, Bell, MailQuestion, Shield, Settings,
-  Database, Server, ShieldAlert, FileText,
+  Megaphone, Bell, MailQuestion, Shield,
+  Database, ShieldAlert, FileText,
   BookOpen, Download, RefreshCw, RotateCcw,
   PenLine, UserMinus, Users2, Eye,
-  SlidersHorizontal, Undo2, MessageCircleQuestion
+  SlidersHorizontal, MessageCircleQuestion,
+  UsersIcon, Tag,
 } from 'lucide-react';
 
 export type FeatureCategory = 'chat' | 'file' | 'knowledge' | 'notice' | 'admin' | 'request';
 
 export interface AppFeatureDef {
-  id: string; // Used for UI click handling
+  id: string;
   label: string;
   description: string;
   category: FeatureCategory;
@@ -39,89 +40,89 @@ export const APP_FEATURES: AppFeatureDef[] = [
   { id: 'admin-log', label: '로그 조회', description: '시스템 운영 로그', category: 'admin', icon: ScrollText, requiredFeatureKeys: ['GLOBAL_LOG_VIEW'] },
 ];
 
-export interface ApiPermissionDef {
-  method: string;
-  pathPrefix: string;
-  featureKey?: string; // Optional match by featureKey if returned by backend
-  label: string;
-  description?: string;
-  category: FeatureCategory;
+// ── featureKey → UI 메타데이터 맵 ────────────────────────────────────────────
+//
+// 서버(RoleServer)가 반환하는 allowedApis에는 featureKey와 description이 포함됩니다.
+// label은 서버의 description을 그대로 사용하고, 아이콘과 카테고리만 여기서 정의합니다.
+
+export interface FeatureUiMeta {
   icon: React.ElementType;
+  category: FeatureCategory;
 }
 
-export const API_PERMISSIONS: ApiPermissionDef[] = [
-  // Chat & File
-  { featureKey: 'CHAT_MESSAGE', method: 'POST', pathPrefix: '/api/chat/message', label: '채팅 전송', description: '채팅 메시지 전송', category: 'chat', icon: ChatIcon },
-  { featureKey: 'CHAT_STREAM', method: 'GET', pathPrefix: '/api/chat/stream', label: '채팅 스트림', description: '채팅 메시지 스트림 수신', category: 'chat', icon: ChatIcon },
-  { featureKey: 'CHAT_HISTORY_READ', method: 'GET', pathPrefix: '/api/chat/history', label: '채팅 기록 조회', description: '과거 채팅 기록 조회', category: 'chat', icon: FolderOpen },
-  { featureKey: 'CHAT_HISTORY_DELETE', method: 'DELETE', pathPrefix: '/api/chat/history', label: '채팅 기록 삭제', description: '채팅 기록 삭제', category: 'chat', icon: TrashIcon },
-  { featureKey: 'FILE_UPLOAD', method: 'POST', pathPrefix: '/api/files', label: '파일 업로드', description: '파일 업로드', category: 'file', icon: Upload },
-  { featureKey: 'FILE_LIST', method: 'GET', pathPrefix: '/api/files', label: '파일 목록 조회', description: '업로드된 파일 목록 조회', category: 'file', icon: FolderOpen },
-  { featureKey: 'FILE_DOWNLOAD', method: 'GET', pathPrefix: '/api/files/', label: '파일 다운로드', description: '파일 다운로드', category: 'file', icon: Download },
-  { featureKey: 'GLOBAL_FILE_DELETE', method: 'DELETE', pathPrefix: '/api/files/', label: '타인 파일 삭제', description: '타인이 업로드한 파일 삭제', category: 'file', icon: TrashIcon },
-  
+export const FEATURE_UI_MAP: Record<string, FeatureUiMeta> = {
+  // Chat
+  CHAT_MESSAGE:              { icon: ChatIcon,             category: 'chat'      },
+  CHAT_STREAM:               { icon: ChatIcon,             category: 'chat'      },
+  CHAT_HISTORY_READ:         { icon: FolderOpen,           category: 'chat'      },
+  CHAT_HISTORY_DELETE:       { icon: TrashIcon,            category: 'chat'      },
+  // File
+  FILE_UPLOAD:               { icon: Upload,               category: 'file'      },
+  FILE_LIST:                 { icon: FolderOpen,           category: 'file'      },
+  FILE_DOWNLOAD:             { icon: Download,             category: 'file'      },
+  GLOBAL_FILE_DELETE:        { icon: TrashIcon,            category: 'file'      },
   // Knowledge
-  { featureKey: 'KNOWLEDGE_CREATE', method: 'POST', pathPrefix: '/api/knowledge', label: '지식 등록', description: '지식 RAG 항목 추가', category: 'knowledge', icon: BookPlus },
-  { featureKey: 'KNOWLEDGE_MODIFY', method: 'POST', pathPrefix: '/api/knowledge/update', label: '지식 수정', description: '기존 지식 RAG 항목 내용 수정', category: 'knowledge', icon: FileEdit },
-  { featureKey: 'KNOWLEDGE_DELETE', method: 'POST', pathPrefix: '/api/knowledge/purge', label: '지식 삭제', description: '지식 RAG 항목 삭제', category: 'knowledge', icon: TrashIcon },
-  
+  KNOWLEDGE_CREATE:          { icon: BookPlus,             category: 'knowledge' },
+  KNOWLEDGE_MODIFY:          { icon: FileEdit,             category: 'knowledge' },
+  KNOWLEDGE_DELETE:          { icon: TrashIcon,            category: 'knowledge' },
   // Notice
-  { featureKey: 'GLOBAL_NOTICE_SEND_ROLE', method: 'POST', pathPrefix: '/api/notice', label: '역할 공지 발송', description: '특정 역할 대상 공지 발송', category: 'notice', icon: Megaphone },
-  { featureKey: 'GLOBAL_NOTICE_UPDATE', method: 'POST', pathPrefix: '/api/notice/update', label: '공지 수정', description: '기존 공지 내용 수정', category: 'notice', icon: PenLine },
-  { featureKey: 'GLOBAL_NOTICE_SEND_ALL', method: 'POST', pathPrefix: '/api/notice/all', label: '전체 공지 발송', description: '전체 사용자 대상 공지 발송', category: 'notice', icon: Bell },
-  { featureKey: 'GLOBAL_NOTICE_UPDATE_ALL', method: 'POST', pathPrefix: '/api/notice/all/update', label: '전체 공지 수정', description: '전체 공지 내용 수정', category: 'notice', icon: PenLine },
-  
-  // Admin & Management
-  { featureKey: 'ROLE_PROFILE_VIEW', method: 'GET', pathPrefix: '/api/management/role/profile', label: '본인 역할 프로필 조회', description: '로그인 사용자 본인의 역할 프로필 조회', category: 'admin', icon: Eye },
-  { featureKey: 'ADMIN_USERS', method: 'GET', pathPrefix: '/api/admin/users', label: '계정 조회', description: '가입된 사용자 계정 조회', category: 'admin', icon: Users },
-  { featureKey: 'ROLE_ASSIGN', method: 'POST', pathPrefix: '/api/management/role/assign', label: '역할 배정', description: '사용자에게 역할 배정', category: 'admin', icon: ShieldAlert },
-  { featureKey: 'ROLE_REVOKE', method: 'DELETE', pathPrefix: '/api/management/role/revoke', label: '역할 제거', description: '사용자에게서 역할 제거', category: 'admin', icon: UserMinus },
-  { featureKey: 'ROLE_VIEW', method: 'GET', pathPrefix: '/api/management/role/get', label: '역할 조회', description: '사용자별 역할 조회', category: 'admin', icon: Shield },
-  { featureKey: 'ROLE_DEFINE_CREATE', method: 'POST', pathPrefix: '/api/management/role/define', label: '역할 정의', description: '역할 정의 생성', category: 'admin', icon: ShieldAlert },
-  { featureKey: 'ROLE_DEFINE_MODIFY', method: 'PATCH', pathPrefix: '/api/management/role/define/', label: '역할 정의 수정', description: '역할 정의 태그·설명 수정', category: 'admin', icon: PenLine },
-  { featureKey: 'ROLE_DEFINE_DELETE', method: 'DELETE', pathPrefix: '/api/management/role/define/', label: '역할 정의 삭제', description: '역할 정의 삭제', category: 'admin', icon: TrashIcon },
-  // Team
-  { featureKey: 'GLOBAL_TEAM_CREATE', method: 'POST', pathPrefix: '/api/management/team', label: '팀 생성', description: '신규 팀 생성', category: 'admin', icon: Users2 },
-  { featureKey: 'TEAM_VIEW', method: 'GET', pathPrefix: '/api/management/team', label: '팀 목록 조회', description: '모든 팀 정보 조회', category: 'admin', icon: Eye },
-  { featureKey: 'TEAM_MANAGE', method: 'PATCH', pathPrefix: '/api/management/team/', label: '팀 설정 변경', description: '팀 이름·색상 등 설정 수정', category: 'admin', icon: SlidersHorizontal },
-  { featureKey: 'TEAM_DELETE', method: 'DELETE', pathPrefix: '/api/management/team/', label: '팀 삭제', description: '팀 삭제', category: 'admin', icon: TrashIcon },
-  { featureKey: 'TEAM_NOTICE', method: 'POST', pathPrefix: '/api/management/team/notice', label: '팀 공지 발송', description: '팀 대상 공지 발송', category: 'admin', icon: Megaphone },
-  // Cache & System
-  { featureKey: 'GLOBAL_CACHE_RELOAD_USER', method: 'POST', pathPrefix: '/api/management/role/reload', label: '사용자 캐시 새로고침', description: '특정 사용자의 역할 캐시 무효화', category: 'admin', icon: RefreshCw },
-  { featureKey: 'GLOBAL_CACHE_RELOAD_ALL', method: 'POST', pathPrefix: '/api/management/role/reload/all', label: '전체 캐시 새로고침', description: '전체 역할 캐시 무효화', category: 'admin', icon: RefreshCw },
-  { featureKey: 'GLOBAL_BACKUP_CREATE', method: 'POST', pathPrefix: '/api/management/backups', label: '백업 관리', description: '시스템 백업 관리', category: 'admin', icon: HardDrive },
-  { featureKey: 'GLOBAL_BACKUP_RESTORE', method: 'POST', pathPrefix: '/api/management/backups/', label: '백업 복구', description: '특정 백업본 복구 요청', category: 'admin', icon: RotateCcw },
-  { featureKey: 'GLOBAL_LOG_VIEW', method: 'GET', pathPrefix: '/api/management/log', label: '로그 조회', description: '시스템 운영 및 접속 로그 열람', category: 'admin', icon: ScrollText },
-  // Account
-
-  
+  GLOBAL_NOTICE_SEND_ROLE:   { icon: Megaphone,            category: 'notice'    },
+  GLOBAL_NOTICE_UPDATE:      { icon: PenLine,              category: 'notice'    },
+  GLOBAL_NOTICE_SEND_ALL:    { icon: Bell,                 category: 'notice'    },
+  GLOBAL_NOTICE_UPDATE_ALL:  { icon: PenLine,              category: 'notice'    },
+  // Role management
+  ROLE_PROFILE_VIEW:         { icon: Eye,                  category: 'admin'     },
+  ADMIN_USERS:               { icon: Users,                category: 'admin'     },
+  ROLE_ASSIGN:               { icon: ShieldAlert,          category: 'admin'     },
+  ROLE_REVOKE:               { icon: UserMinus,            category: 'admin'     },
+  ROLE_VIEW:                 { icon: Shield,               category: 'admin'     },
+  ROLE_TAGS_VIEW:            { icon: Tag,                  category: 'admin'     },
+  ROLE_DEFINE_CREATE:        { icon: ShieldAlert,          category: 'admin'     },
+  ROLE_DEFINE_MODIFY:        { icon: PenLine,              category: 'admin'     },
+  ROLE_DEFINE_DELETE:        { icon: TrashIcon,            category: 'admin'     },
+  // Team management
+  GLOBAL_TEAM_CREATE:        { icon: Users2,               category: 'admin'     },
+  TEAM_VIEW:                 { icon: Eye,                  category: 'admin'     },
+  TEAM_MEMBER_VIEW:          { icon: UsersIcon,            category: 'admin'     },
+  TEAM_MANAGE:               { icon: SlidersHorizontal,    category: 'admin'     },
+  TEAM_DELETE:               { icon: TrashIcon,            category: 'admin'     },
+  TEAM_NOTICE:               { icon: Megaphone,            category: 'admin'     },
+  // Cache & system
+  GLOBAL_CACHE_RELOAD_USER:  { icon: RefreshCw,            category: 'admin'     },
+  GLOBAL_CACHE_RELOAD_ALL:   { icon: RefreshCw,            category: 'admin'     },
+  GLOBAL_BACKUP_CREATE:      { icon: HardDrive,            category: 'admin'     },
+  GLOBAL_BACKUP_RESTORE:     { icon: RotateCcw,            category: 'admin'     },
+  GLOBAL_LOG_VIEW:           { icon: ScrollText,           category: 'admin'     },
   // Requests
-  { featureKey: 'GLOBAL_REQUEST_VIEW', method: 'GET', pathPrefix: '/api/management/request/list', label: '문의사항 조회', description: '접수된 문의사항 전체 조회', category: 'request', icon: MailQuestion },
-  { featureKey: 'GLOBAL_REQUEST_VIEW_DETAIL', method: 'GET', pathPrefix: '/api/management/request/', label: '문의사항 상세', description: '문의사항 상세 내용 조회', category: 'request', icon: FileText },
-  { featureKey: 'REQUEST_POST', method: 'POST', pathPrefix: '/api/management/request/post', label: '문의 등록', description: '문의사항 등록', category: 'request', icon: MessageCircleQuestion },
-];
+  GLOBAL_REQUEST_VIEW:        { icon: MailQuestion,        category: 'request'   },
+  GLOBAL_REQUEST_VIEW_DETAIL: { icon: FileText,            category: 'request'   },
+  REQUEST_POST:               { icon: MessageCircleQuestion, category: 'request' },
+};
 
-/** 
- * Backend API 매칭 헬퍼 
+/** featureKey 접두사로부터 카테고리를 추론합니다 (FEATURE_UI_MAP 미등록 항목 fallback). */
+function deriveCategory(featureKey?: string): FeatureCategory {
+  if (!featureKey) return 'admin';
+  if (featureKey.startsWith('CHAT_'))                                       return 'chat';
+  if (featureKey.startsWith('FILE_') || featureKey.startsWith('GLOBAL_FILE_')) return 'file';
+  if (featureKey.startsWith('KNOWLEDGE_'))                                  return 'knowledge';
+  if (featureKey.includes('NOTICE_'))                                       return 'notice';
+  if (featureKey.startsWith('REQUEST_') || featureKey.startsWith('GLOBAL_REQUEST_')) return 'request';
+  return 'admin';
+}
+
+/**
+ * 서버가 반환한 allowedApi 항목에 UI 메타데이터(icon, category, label)를 보강합니다.
+ *
+ * - label   : 서버의 description 필드를 그대로 사용
+ * - icon    : FEATURE_UI_MAP 조회 → 없으면 Database 기본값
+ * - category: FEATURE_UI_MAP 조회 → 없으면 featureKey 접두사로 추론
  */
-export function getMappedApiInfo(api: { method: string, path: string, featureKey?: string }) {
-  // 1. featureKey 우선 매칭
-  if (api.featureKey) {
-    const match = API_PERMISSIONS.find(p => p.featureKey === api.featureKey);
-    if (match) return match;
-  }
-  // 2. method + pathPrefix 매칭
-  const matches = API_PERMISSIONS.filter(p => p.method === api.method && api.path.startsWith(p.pathPrefix));
-  if (matches.length > 0) {
-    // 가장 긴 pathPrefix (가장 구체적인) 매칭
-    return matches.sort((a, b) => b.pathPrefix.length - a.pathPrefix.length)[0];
-  }
-  
-  // 3. 매칭 안될 경우 기본값 생성
+export function getMappedApiInfo(api: { method?: string; featureKey?: string; description?: string }) {
+  const ui = api.featureKey ? FEATURE_UI_MAP[api.featureKey] : undefined;
   return {
-    label: api.featureKey || api.path,
-    description: '기타 API',
-    category: 'admin' as FeatureCategory,
-    icon: Database
+    label:       api.description ?? api.featureKey ?? '알 수 없는 API',
+    description: api.description,
+    category:    (ui?.category ?? deriveCategory(api.featureKey)) as FeatureCategory,
+    icon:        ui?.icon ?? Database,
   };
 }

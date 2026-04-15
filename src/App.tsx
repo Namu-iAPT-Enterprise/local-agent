@@ -6,6 +6,7 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import AdminUsersScreen from './components/AdminUsersScreen';
+import SecurityTestPage from './pages/SecurityTestPage';
 import RequestsScreen from './components/RequestsScreen';
 import KnowledgeScreen from './components/KnowledgeScreen';
 import { useTheme } from './context/ThemeContext';
@@ -42,8 +43,8 @@ import { AssistantChatIntro } from './components/chat/AssistantChatIntro';
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-type AppPage = 'login' | 'signup' | 'home' | 'settings' | 'admin-users' | 'requests' | 'knowledge';
-const APP_PAGE_HASHES: readonly AppPage[] = ['login', 'signup', 'home', 'settings', 'admin-users', 'requests', 'knowledge'];
+type AppPage = 'login' | 'signup' | 'home' | 'settings' | 'admin-users' | 'requests' | 'knowledge' | 'security-test';
+const APP_PAGE_HASHES: readonly AppPage[] = ['login', 'signup', 'home', 'settings', 'admin-users', 'requests', 'knowledge', 'security-test'];
 function isAppPage(hash: string): hash is AppPage {
   return (APP_PAGE_HASHES as readonly string[]).includes(hash);
 }
@@ -367,6 +368,9 @@ export default function App() {
     }
     return <RequestsScreen onBack={() => navigateTo('home')} />;
   }
+
+  if (page === 'security-test')
+    return <SecurityTestPage onBack={() => navigateTo('home')} />;
 
   if (page === 'knowledge') {
     if (permissions.status === 'idle' || permissions.status === 'loading') return null;
