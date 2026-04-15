@@ -9,6 +9,8 @@ export interface EmptyChatHomeProps {
   activeAssistantId: string | null;
   onSelectAssistant: (assistant: OfficeAssistant) => void;
   onCreateAssistant: () => void;
+  onEditAssistant: (assistant: OfficeAssistant) => void;
+  onDeleteAssistant: (id: string) => void;
 }
 
 export function EmptyChatHome({
@@ -18,6 +20,8 @@ export function EmptyChatHome({
   activeAssistantId,
   onSelectAssistant,
   onCreateAssistant,
+  onEditAssistant,
+  onDeleteAssistant,
 }: EmptyChatHomeProps) {
   return (
     <div className="flex flex-col flex-1 min-h-0 items-center justify-center px-4 py-8 sm:px-8 md:px-12 md:py-12 lg:px-16 overflow-y-auto">
@@ -33,6 +37,8 @@ export function EmptyChatHome({
               activeAssistantId={activeAssistantId}
               onSelectAssistant={onSelectAssistant}
               onCreateAssistant={onCreateAssistant}
+              onEditAssistant={onEditAssistant}
+              onDeleteAssistant={onDeleteAssistant}
             />
           </div>
         </div>

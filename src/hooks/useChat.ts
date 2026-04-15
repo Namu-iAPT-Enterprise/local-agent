@@ -1,8 +1,6 @@
 import { useState, useRef } from 'react';
 import { postChatMessage, streamChatSession, getChatHistory, type ChatImagePart } from '../api/chat';
 import { isOllamaOpenAICompatUrl } from '../api/openaiClient';
-import { readFileAsUtf8Stream } from '../utils/readFileAsUtf8Stream';
-
 // ── Smart thinking suppression ────────────────────────────────────────────────
 
 /**
@@ -124,8 +122,10 @@ export interface PendingChatAttachment {
   base64?: string;
   /** Compressed image bytes for multipart POST (same pixels as base64, smaller on the wire than JSON base64) */
   imageBlob?: Blob;
-  /** UTF-8 text for small text files */
+  /** UTF-8 text, or raw base64 when {@link fileEncoding} is `base64` */
   text?: string;
+  /** Non-text files (PDF, zip, etc.) are sent as base64 in the message */
+  fileEncoding?: 'utf8' | 'base64';
 }
 
 /** Shown on sent user bubbles (no base64). */
@@ -149,6 +149,8 @@ export interface Message {
   activeVariantIdx?: number;
   /** Images / file chips for user messages */
   attachments?: UserAttachmentDisplay[];
+  /** When set, the response was triggered by a slash-skill and should render a download card */
+  skillType?: 'docx' | 'pptx' | 'xlsx' | 'pdf';
 }
 
 const MAX_VISION_IMAGES = 6;
@@ -261,9 +263,47 @@ export function isProbablyImageFile(file: File): boolean {
   return IMAGE_NAME_EXT.test(getFileBasename(file));
 }
 
+/** PDF, archives, media, fonts — avoid UTF-8 mojibake when the picker allows any type */
+function shouldTreatBytesAsBinary(bytes: Uint8Array, file: File): boolean {
+  const t = file.type.toLowerCase();
+  if (
+    t === 'application/pdf'
+    || t === 'application/zip'
+    || t === 'application/x-apple-diskimage'
+    || t.startsWith('application/vnd.')
+    || t.startsWith('audio/')
+    || t.startsWith('video/')
+    || (t.startsWith('font/') && !t.includes('svg'))
+  ) {
+    return true;
+  }
+  if (t === 'application/octet-stream' || t === 'application/x-msdownload') return true;
+  const n = Math.min(8192, bytes.length);
+  for (let i = 0; i < n; i++) {
+    if (bytes[i] === 0) return true;
+  }
+  return false;
+}
+
+async function readBlobAsBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const d = r.result as string;
+      const i = d.indexOf(',');
+      resolve(i >= 0 ? d.slice(i + 1) : d);
+    };
+    r.onerror = () => reject(r.error ?? new Error('FileReader failed'));
+    r.readAsDataURL(blob);
+  });
+}
+
 export { MAX_IMAGE_BYTES, MAX_TEXT_FILE_BYTES, MAX_VISION_IMAGES };
 
-function fileBlock(name: string, body: string): string {
+function fileBlock(name: string, body: string, encoding?: 'utf8' | 'base64'): string {
+  if (encoding === 'base64') {
+    return `\n\n--- file: ${name} (base64) ---\n${body}`;
+  }
   return `\n\n--- file: ${name} ---\n${body}`;
 }
 
@@ -290,7 +330,7 @@ function buildOutgoing(
   if (cap) parts.push(cap);
   for (const p of pending ?? []) {
     if (p.status === 'loading') continue;
-    if (p.kind === 'file' && p.text) parts.push(fileBlock(p.name, p.text));
+    if (p.kind === 'file' && p.text) parts.push(fileBlock(p.name, p.text, p.fileEncoding));
   }
   let message = parts.join('');
   const imageB64: string[] = [];
@@ -369,10 +409,25 @@ export async function readSingleFileAsAttachment(
     return { error: `${displayName}: file too large (max ${MAX_TEXT_FILE_BYTES / 1024}KB)` };
   }
   try {
-    const text = await readFileAsUtf8Stream(file);
-    return { attachment: { id, kind: 'file', name: displayName, status: 'ready', text } };
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    if (shouldTreatBytesAsBinary(bytes, file)) {
+      const b64 = await readBlobAsBase64(new Blob([bytes]));
+      return {
+        attachment: {
+          id,
+          kind: 'file',
+          name: displayName,
+          status: 'ready',
+          text: b64,
+          fileEncoding: 'base64',
+        },
+      };
+    }
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    return { attachment: { id, kind: 'file', name: displayName, status: 'ready', text, fileEncoding: 'utf8' } };
   } catch {
-    return { error: `${displayName}: could not read as text` };
+    return { error: `${displayName}: could not read file` };
   }
 }
 
@@ -509,12 +564,41 @@ export function useChat() {
             }))
         : undefined;
 
+    // Detect slash-skill trigger (e.g. "/docx", "/pptx", "/xlsx", "/pdf")
+    const slashMatch = /^\/(\w+)/.exec(userCaption);
+    const detectedSkill = (['docx', 'pptx', 'xlsx', 'pdf'] as const).find(
+      (s) => slashMatch?.[1]?.toLowerCase() === s,
+    );
+
+    // When a skill is active, strip the /skill-name prefix from the user bubble
+    // and inject a document-creation hint for the API call.
+    const SKILL_PROMPTS: Record<string, string> = {
+      docx: 'You are creating a Word document. Respond with well-structured Markdown: use # headings, **bold**, bullet lists, and numbered lists where appropriate. Do NOT include any prose like "Here is your document" — output only the document content.',
+      pptx: 'You are creating a PowerPoint presentation. Structure your response as Markdown:\n- Use "# Title" for the presentation title (first line only)\n- Use "## Slide Title" for each slide (one ## per slide)\n- Under each slide, use bullet points (- item) for content\n- Keep bullets short (one idea per bullet, max ~8 words)\n- Aim for 5–10 slides total\n- Do NOT include any prose outside the structure — output only the slide content.',
+      xlsx: 'You are creating an Excel spreadsheet. Respond with Markdown tables representing the spreadsheet data.',
+      pdf:  'You are creating a PDF document. Respond with well-structured Markdown.',
+    };
+
+    let effectiveApiCaption = apiCaption;
+    let effectiveUserCaption = userCaption;
+    if (detectedSkill) {
+      // Strip "/docx " prefix from user bubble text
+      effectiveUserCaption = userCaption.replace(/^\/\w+\s*/, '').trim() || userCaption;
+      const hint = SKILL_PROMPTS[detectedSkill];
+      effectiveApiCaption = hint
+        ? `${hint}\n\nUser request: ${userCaption.replace(/^\/\w+\s*/, '').trim()}`
+        : apiCaption;
+    }
+
+    const builtUiSkill = detectedSkill ? buildOutgoing(effectiveUserCaption, pending, model) : builtUi;
+    const builtApiSkill = detectedSkill ? buildOutgoing(effectiveApiCaption, pending, model) : builtApi;
+
     rawRef.current = '';
     setMessages((prev) => [
       ...prev,
-      { role: 'user', content: builtUi.message, attachments: uiAttachments },
+      { role: 'user', content: builtUiSkill.message, attachments: uiAttachments },
     ]);
-    setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'connecting' }]);
+    setMessages((prev) => [...prev, { role: 'assistant', content: '', status: 'connecting', ...(detectedSkill ? { skillType: detectedSkill } : {}) }]);
     setIsStreaming(true);
 
     const controller = new AbortController();
@@ -564,12 +648,12 @@ export function useChat() {
       if (model.isLocal) {
         const payload: Parameters<typeof postChatMessage>[0] = {
           sessionId: effectiveSessionId,
-          message: builtApi.message,
-          thinking: shouldThink(builtApi.message, thinking),
+          message: builtApiSkill.message,
+          thinking: shouldThink(builtApiSkill.message, thinking),
           model: model.name,
           useRag: ragMode,
         };
-        const nVision = builtApi.images?.length ?? 0;
+        const nVision = builtApiSkill.images?.length ?? 0;
         const imageParts: ChatImagePart[] | undefined =
           nVision > 0 && pending
             ? pending
@@ -579,7 +663,7 @@ export function useChat() {
         const useMultipart =
           nVision > 0 && imageParts && imageParts.length === nVision;
         if (nVision > 0 && !useMultipart) {
-          payload.images = builtApi.images;
+          payload.images = builtApiSkill.images;
         }
         const { sessionId: newSessionId } = await postChatMessage(
           payload,
@@ -609,8 +693,8 @@ export function useChat() {
 
         const payload = {
           sessionId: effectiveSessionId,
-          message: builtApi.message,
-          thinking: shouldThink(builtApi.message, thinking),
+          message: builtApiSkill.message,
+          thinking: shouldThink(builtApiSkill.message, thinking),
           model: model.name,
           platform: model.platform,
           baseUrl,

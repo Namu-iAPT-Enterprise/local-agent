@@ -5,12 +5,14 @@ import type { OfficeAssistant } from '../data/officeAssistants';
 interface CreateAssistantModalProps {
   onClose: () => void;
   onCreate: (assistant: OfficeAssistant) => void;
+  initialValues?: Pick<OfficeAssistant, 'id' | 'name' | 'description' | 'systemPrompt'>;
 }
 
-export default function CreateAssistantModal({ onClose, onCreate }: CreateAssistantModalProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [rules, setRules] = useState('');
+export default function CreateAssistantModal({ onClose, onCreate, initialValues }: CreateAssistantModalProps) {
+  const isEditMode = !!initialValues;
+  const [name, setName] = useState(initialValues?.name ?? '');
+  const [description, setDescription] = useState(initialValues?.description ?? '');
+  const [rules, setRules] = useState(initialValues?.systemPrompt ?? '');
   const [rulesTab, setRulesTab] = useState<'edit' | 'preview'>('edit');
   const [skills, setSkills] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -28,8 +30,8 @@ export default function CreateAssistantModal({ onClose, onCreate }: CreateAssist
   const handleCreate = () => {
     if (!name.trim()) return;
 
-    const newAssistant: OfficeAssistant = {
-      id: `custom-${Date.now()}`,
+    const assistant: OfficeAssistant = {
+      id: initialValues?.id ?? `custom-${Date.now()}`,
       name: name.trim(),
       description: description.trim() || '사용자 정의 어시스턴트',
       icon: Activity,
@@ -39,7 +41,7 @@ export default function CreateAssistantModal({ onClose, onCreate }: CreateAssist
       isDefault: false,
     };
 
-    onCreate(newAssistant);
+    onCreate(assistant);
     onClose();
   };
 
@@ -48,7 +50,7 @@ export default function CreateAssistantModal({ onClose, onCreate }: CreateAssist
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-[680px] max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">어시스턴트 만들기</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{isEditMode ? '어시스턴트 수정' : '어시스턴트 만들기'}</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
             <X size={18} />
           </button>
@@ -182,7 +184,7 @@ export default function CreateAssistantModal({ onClose, onCreate }: CreateAssist
             disabled={!name.trim()}
             className="px-6 py-2.5 rounded-xl bg-gray-900 dark:bg-gray-600 hover:bg-gray-800 dark:hover:bg-gray-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            만들기
+            {isEditMode ? '수정' : '만들기'}
           </button>
           <button onClick={onClose} className="px-6 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
             취소

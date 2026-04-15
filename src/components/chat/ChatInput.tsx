@@ -10,9 +10,11 @@ import {
   FileText,
   Paperclip,
   Image,
+  Zap,
 } from 'lucide-react';
 import { type ModelOption, type PendingChatAttachment } from '../../hooks/useChat';
 import { ModelSelector } from './ModelSelector';
+import { getInstalledSkills, type Skill } from '../../data/skills';
 
 /** Shown next to the attach (+) control when an office assistant is selected. */
 export interface ActiveAssistantChipData {
@@ -47,9 +49,8 @@ export interface ChatInputProps {
   onClearAssistant?: () => void;
 }
 
-/** Document/code picker; image extensions included so “Upload files” still accepts photos (Electron-friendly). */
-const CHAT_FILE_ACCEPT =
-  '.txt,.text,.md,.markdown,.mdx,.csv,.json,.xml,.log,.ts,.tsx,.js,.jsx,.mjs,.cjs,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.sql,.yaml,.yml,.sh,.env,.css,.scss,.html,.vue,.svelte,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.ico,.heic,.heif,.avif,.tif,.tiff';
+/** All MIME types — “Photos” menu still uses `image/*` only */
+const CHAT_FILE_ACCEPT = '*/*';
 
 function FileTypeIcon({ name }: { name: string }) {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
@@ -219,6 +220,54 @@ export function ChatInput({
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const chatImageInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Slash command autocomplete ────────────────────────────────────────────
+  const [slashSuggestions, setSlashSuggestions] = useState<Skill[]>([]);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const slashMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const match = /(?:^|\s)(\/(\w*))$/.exec(input);
+    if (match) {
+      const query = match[2].toLowerCase();
+      const installed = getInstalledSkills();
+      const hits = installed.filter((s) => s.id.toLowerCase().startsWith(query));
+      setSlashSuggestions(hits);
+      setSlashIndex(0);
+    } else {
+      setSlashSuggestions([]);
+    }
+  }, [input]);
+
+  const applySlashSkill = (skill: Skill) => {
+    const updated = input.replace(/\/\w*$/, `/${skill.id} `);
+    setInput(updated);
+    setSlashSuggestions([]);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
+  const handleSlashKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashSuggestions.length === 0) return false;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSlashIndex((i) => (i + 1) % slashSuggestions.length);
+      return true;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSlashIndex((i) => (i - 1 + slashSuggestions.length) % slashSuggestions.length);
+      return true;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      const skill = slashSuggestions[slashIndex];
+      if (skill) { e.preventDefault(); applySlashSkill(skill); return true; }
+    }
+    if (e.key === 'Escape') {
+      setSlashSuggestions([]);
+      return true;
+    }
+    return false;
+  };
+
   useEffect(() => {
     if (!attachMenuOpen) return;
     const onDoc = (e: MouseEvent) => {
@@ -243,7 +292,7 @@ export function ChatInput({
   const hasAttachments = pendingAttachments.length > 0;
   return (
     <div
-      className="border border-neutral-200/90 dark:border-neutral-700 rounded-2xl bg-white dark:bg-neutral-950 shadow-md overflow-visible"
+      className="relative border border-neutral-200/90 dark:border-neutral-700 rounded-2xl bg-white dark:bg-neutral-950 shadow-md overflow-visible"
       onDragOver={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -254,7 +303,7 @@ export function ChatInput({
         const files = Array.from(e.dataTransfer.files);
         if (files.length) void onAddFilesFromBrowser(files);
       }}
-      title="Drop images or text files here, or use + to attach"
+      title="Drop files here, or use + to attach (any file type)"
     >
       <input
         ref={chatFileInputRef}
@@ -295,11 +344,43 @@ export function ChatInput({
             ))}
           </div>
         )}
+        {/* Slash command suggestions popup */}
+        {slashSuggestions.length > 0 && (
+          <div
+            ref={slashMenuRef}
+            className="absolute bottom-full left-0 right-0 mb-2 z-[60] rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg overflow-hidden"
+          >
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+              <Zap size={12} className="text-blue-500" />
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Skills</span>
+            </div>
+            {slashSuggestions.map((skill, i) => (
+              <button
+                key={skill.id}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); applySlashSkill(skill); }}
+                onMouseEnter={() => setSlashIndex(i)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                  i === slashIndex
+                    ? 'bg-blue-50 dark:bg-blue-900/30'
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/60'
+                }`}
+              >
+                <span className="text-base w-7 text-center flex-shrink-0">{skill.icon}</span>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-100">/{skill.id}</span>
+                  <p className="text-xs text-gray-400 truncate mt-0.5">{skill.description}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
+          onKeyDown={(e) => { if (!handleSlashKeyDown(e)) onKeyDown(e); }}
           placeholder={placeholder}
           rows={3}
           disabled={isStreaming}

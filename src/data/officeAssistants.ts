@@ -65,6 +65,7 @@ export const defaultAssistants: OfficeAssistant[] = [
 ];
 
 const CUSTOM_ASSISTANTS_KEY = 'namu_custom_office_assistants';
+const ASSISTANT_VISIBILITY_KEY = 'namu_assistant_visibility';
 
 export function getCustomAssistants(): OfficeAssistant[] {
   try {
@@ -88,6 +89,83 @@ export function saveCustomAssistant(assistant: OfficeAssistant): void {
     const updated = [...existing, assistant];
     const storable = updated.map(({ icon, ...rest }) => rest);
     localStorage.setItem(CUSTOM_ASSISTANTS_KEY, JSON.stringify(storable));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function updateCustomAssistant(assistant: OfficeAssistant): void {
+  try {
+    const existing = getCustomAssistants();
+    const updated = existing.map((a) => (a.id === assistant.id ? assistant : a));
+    const storable = updated.map(({ icon, ...rest }) => rest);
+    localStorage.setItem(CUSTOM_ASSISTANTS_KEY, JSON.stringify(storable));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function deleteCustomAssistant(id: string): void {
+  try {
+    const existing = getCustomAssistants();
+    const updated = existing.filter((a) => a.id !== id);
+    const storable = updated.map(({ icon, ...rest }) => rest);
+    localStorage.setItem(CUSTOM_ASSISTANTS_KEY, JSON.stringify(storable));
+    // also clean up visibility entry
+    const vis = getAssistantVisibilityMap();
+    delete vis[id];
+    localStorage.setItem(ASSISTANT_VISIBILITY_KEY, JSON.stringify(vis));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function getAssistantVisibilityMap(): Record<string, boolean> {
+  try {
+    const stored = localStorage.getItem(ASSISTANT_VISIBILITY_KEY);
+    if (stored) return JSON.parse(stored) as Record<string, boolean>;
+  } catch {
+    // Ignore storage errors
+  }
+  return {};
+}
+
+// ── Default assistant overrides ───────────────────────────────────────────────
+const ASSISTANT_OVERRIDES_KEY = 'namu_assistant_overrides';
+
+type AssistantOverride = Pick<OfficeAssistant, 'name' | 'description' | 'systemPrompt' | 'promptPrefix'>;
+
+export function getAssistantOverrides(): Record<string, AssistantOverride> {
+  try {
+    const stored = localStorage.getItem(ASSISTANT_OVERRIDES_KEY);
+    if (stored) return JSON.parse(stored) as Record<string, AssistantOverride>;
+  } catch {
+    // Ignore storage errors
+  }
+  return {};
+}
+
+export function saveAssistantOverride(id: string, override: AssistantOverride): void {
+  try {
+    const current = getAssistantOverrides();
+    current[id] = override;
+    localStorage.setItem(ASSISTANT_OVERRIDES_KEY, JSON.stringify(current));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+/** Returns true if assistant is visible on the main page (default: true). */
+export function isAssistantVisible(id: string): boolean {
+  const map = getAssistantVisibilityMap();
+  return map[id] !== false;
+}
+
+export function setAssistantVisibility(id: string, visible: boolean): void {
+  try {
+    const map = getAssistantVisibilityMap();
+    map[id] = visible;
+    localStorage.setItem(ASSISTANT_VISIBILITY_KEY, JSON.stringify(map));
   } catch {
     // Ignore storage errors
   }

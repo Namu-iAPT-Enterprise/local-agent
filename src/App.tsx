@@ -24,10 +24,21 @@ import { getAccessToken, getAccountRole, saveAccountRole, logout as authLogout, 
 // v2: role assignment is done through AdminUsers page, not auto-created
 import type { ChatSessionInfo } from './api/chat';
 import { usePermissions } from './hooks/usePermissions';
-import { defaultAssistants, getCustomAssistants, saveCustomAssistant, type OfficeAssistant } from './data/officeAssistants';
+import {
+  defaultAssistants,
+  getCustomAssistants,
+  saveCustomAssistant,
+  updateCustomAssistant,
+  deleteCustomAssistant,
+  saveAssistantOverride,
+  getAssistantOverrides,
+  isAssistantVisible,
+  type OfficeAssistant,
+} from './data/officeAssistants';
 import { ChatInput } from './components/chat/ChatInput';
 import { ChatMessageList } from './components/chat/ChatMessageList';
 import { EmptyChatHome } from './components/chat/EmptyChatHome';
+import { AssistantChatIntro } from './components/chat/AssistantChatIntro';
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -91,6 +102,8 @@ export default function App() {
   const { messages, isStreaming, send, regenerate, setVariant, prepareEdit, clear, stop, loadSession, sessionId } = useChat();
 
   const [customAssistants, setCustomAssistants] = useState<OfficeAssistant[]>(() => getCustomAssistants());
+  const [defaultOverrides, setDefaultOverrides] = useState<Record<string, Partial<OfficeAssistant>>>(() => getAssistantOverrides());
+  const [editingAssistant, setEditingAssistant] = useState<OfficeAssistant | null>(null);
   const [activeAssistant, setActiveAssistant] = useState<OfficeAssistant | null>(() => {
     const saved = localStorage.getItem('namu_active_assistant');
     if (saved) {
@@ -124,7 +137,12 @@ export default function App() {
   }, [activeAssistant]);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const allAssistants = [...defaultAssistants, ...customAssistants];
+  const allAssistants = [
+    ...defaultAssistants
+      .filter((a) => isAssistantVisible(a.id))
+      .map((a) => ({ ...a, ...defaultOverrides[a.id] })),
+    ...customAssistants.filter((a) => isAssistantVisible(a.id)),
+  ];
 
   /** Merge persisted selection with catalog so Lucide icons / prompts stay valid. */
   const activeAssistantResolved = useMemo(() => {
@@ -135,6 +153,32 @@ export default function App() {
   const handleClearAssistant = useCallback(() => {
     setActiveAssistant(null);
   }, []);
+
+  const handleEditAssistant = useCallback((assistant: OfficeAssistant) => {
+    setEditingAssistant(assistant);
+  }, []);
+
+  const handleSaveEditedAssistant = useCallback((updated: OfficeAssistant) => {
+    if (updated.isDefault) {
+      // Save override for built-in assistants
+      const override = { name: updated.name, description: updated.description, systemPrompt: updated.systemPrompt, promptPrefix: updated.promptPrefix };
+      saveAssistantOverride(updated.id, override);
+      setDefaultOverrides((prev) => ({ ...prev, [updated.id]: override }));
+    } else {
+      // Update custom assistant in storage
+      updateCustomAssistant(updated);
+      setCustomAssistants((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+    }
+    // Refresh active assistant if it's the one being edited
+    if (activeAssistant?.id === updated.id) setActiveAssistant(updated);
+    setEditingAssistant(null);
+  }, [activeAssistant]);
+
+  const handleDeleteAssistant = useCallback((id: string) => {
+    deleteCustomAssistant(id);
+    setCustomAssistants((prev) => prev.filter((a) => a.id !== id));
+    if (activeAssistant?.id === id) setActiveAssistant(null);
+  }, [activeAssistant]);
 
   /** Never show office-assistant promptPrefix in the composer — only systemPrompt is used on send. */
   useEffect(() => {
@@ -476,6 +520,14 @@ export default function App() {
                 </div>
               </div>
             </div>
+          ) : activeAssistantResolved ? (
+            <AssistantChatIntro
+              id={activeAssistantResolved.id}
+              name={activeAssistantResolved.name}
+              description={activeAssistantResolved.description}
+              Icon={activeAssistantResolved.icon}
+              chatInputProps={chatInputProps}
+            />
           ) : (
             <EmptyChatHome
               greeting={tr.greeting}
@@ -483,11 +535,15 @@ export default function App() {
               assistants={allAssistants}
               activeAssistantId={activeAssistant?.id ?? null}
               onSelectAssistant={(assistant) => {
+                clear();
+                setPendingAttachments([]);
                 setActiveAssistant(assistant);
                 setInput('');
                 setTimeout(() => textareaRef.current?.focus(), 0);
               }}
               onCreateAssistant={() => setShowCreateModal(true)}
+              onEditAssistant={handleEditAssistant}
+              onDeleteAssistant={handleDeleteAssistant}
             />
           )}
         </div>
@@ -507,6 +563,14 @@ export default function App() {
             saveCustomAssistant(assistant);
             setCustomAssistants((prev) => [...prev, assistant]);
           }}
+        />
+      )}
+
+      {editingAssistant && (
+        <CreateAssistantModal
+          onClose={() => setEditingAssistant(null)}
+          onCreate={handleSaveEditedAssistant}
+          initialValues={editingAssistant}
         />
       )}
     </div>

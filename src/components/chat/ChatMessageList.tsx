@@ -3,6 +3,7 @@ import MarkdownRenderer from '../MarkdownRenderer';
 import ThinkingBlock from '../ThinkingBlock';
 import { UserMessage } from './UserMessage';
 import { UserMessageActions, AssistantMessageActions } from './MessageActions';
+import { SkillDownloadCard } from './SkillDownloadCard';
 import type { Message, ModelOption } from '../../hooks/useChat';
 
 export interface ChatMessageListProps {
@@ -86,7 +87,15 @@ export function ChatMessageList({
                         <ThinkingBlock thinking={msg.thinking} isStreaming={thinkingStreaming} />
                       )}
                       {msg.content ? (
-                        <MarkdownRenderer content={msg.content} />
+                        <>
+                          <MarkdownRenderer content={msg.content} />
+                          {/* When a slash-skill was used and streaming is done, append download card */}
+                          {msg.skillType && !(isStreaming && isLast) && (
+                            <div className="mt-4">
+                              <SkillDownloadCard content={msg.content} skillType={msg.skillType} />
+                            </div>
+                          )}
+                        </>
                       ) : isStreaming && isLast && !msg.thinking ? (
                         msg.status === 'connecting' ? (
                           <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500 text-xs py-1">

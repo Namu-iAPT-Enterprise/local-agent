@@ -212,10 +212,52 @@ function ensureNewlineBeforeNumberedListAfterColon(text: string): string {
   return text.replace(/(\w+):(\d+\.\s+)/g, '$1:\n\n$2');
 }
 
+/**
+ * Models often emit bullet items with no newlines between them:
+ *   "Market trends- Competitor analysis- Set goals"
+ * Each "- " that is NOT at the start of a line needs a newline before it.
+ */
+function ensureNewlineBeforeBullets(text: string): string {
+  // Insert \n before "- " or "* " that follows non-newline text
+  let s = text.replace(/([^\n])(- )/g, '$1\n$2');
+  s = s.replace(/([^\n])(\* )/g, '$1\n$2');
+  // Also split inline numbered list items after a letter/period: "da Vinci.2. Next"
+  s = s.replace(/([a-zA-Z*.)])(\d+\.\s)/g, '$1\n$2');
+  return s;
+}
+
+/**
+ * Models sometimes strip the newline after a heading, gluing the body text:
+ *   "## IntroductionThis is the body" → "## Introduction\n\nThis is the body"
+ * Handles CamelCase joins (no space) and sentence-starter joins (space before The/A/An…).
+ */
+function ensureNewlineAfterHeadingText(text: string): string {
+  // CamelCase: "## SectionTitle" where Title is glued to Section body
+  let s = text.replace(/(#{1,6} [^\n]+?)([a-z])([A-Z][a-z])/g, (_m, pre, lo, hi) => pre + lo + '\n\n' + hi);
+  // Sentence starters after a space: "## Conclusion The aeroplane…"
+  s = s.replace(/(#{1,6} [^\n]+\w) (The |A |An |It |This |These |In |For |At |By )/g, '$1\n\n$2');
+  return s;
+}
+
+/**
+ * Any ATX heading (## …) that is NOT already at the start of a line gets
+ * a blank line inserted before it. Handles cases where the line-by-line pass
+ * above misses headings that follow bullet content on the same line.
+ *
+ * IMPORTANT: lookbehind must exclude '#' as well as '\n', otherwise the
+ * second '#' in '## ' matches (its predecessor is '#', not '\n').
+ */
+function ensureNewlineBeforeAllHeadings(text: string): string {
+  return text.replace(/(?<![#\n])(#{1,6} )/g, '\n\n$1');
+}
+
 /** Run first: structural newlines models omit (stable base for fence + heading fixes). */
 function fixModelBlockSeparators(text: string): string {
   let s = ensureNewlineBeforeFenceOpener(text);
   s = ensureNewlineBeforeAtxHeading(s);
+  s = ensureNewlineAfterHeadingText(s);
+  s = ensureNewlineBeforeBullets(s);
+  s = ensureNewlineBeforeAllHeadings(s);   // catch any remaining glued headings
   s = ensureNewlineBeforeNumberedListAfterColon(s);
   return s;
 }
