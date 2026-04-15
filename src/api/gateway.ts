@@ -129,6 +129,110 @@ export async function reloadAllPermissionCache(): Promise<void> {
   if (!res.ok) throw new Error(`전체 캐시 새로고침 실패 (${res.status})`);
 }
 
+// ── Role Definition management ────────────────────────────────────────────────
+
+export interface RoleDefinitionRequest {
+  roleId?: string;
+  displayName?: string;
+  loreDescription?: string;
+  type?: 'PERMISSION' | 'TEAM' | 'TAG';
+  teamId?: string;
+  parentRoleId?: string;
+  adminAccountRequired?: boolean;
+  permissionTagIds?: string[];
+  manageableByRoleIds?: string[];
+}
+
+export async function createRoleDefinition(req: RoleDefinitionRequest): Promise<RoleDefinitionDto> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (res.status === 409) throw new Error(`이미 존재하는 역할 ID: ${req.roleId}`);
+  if (!res.ok) throw new Error(`역할 정의 생성 실패 (${res.status})`);
+  return res.json();
+}
+
+export async function updateRoleDefinition(roleId: string, req: RoleDefinitionRequest): Promise<RoleDefinitionDto> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define/${encodeURIComponent(roleId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (res.status === 404) throw new NotFoundError(`역할 정의 없음: ${roleId}`);
+  if (!res.ok) throw new Error(`역할 정의 수정 실패 (${res.status})`);
+  return res.json();
+}
+
+export async function deleteRoleDefinition(roleId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define/${encodeURIComponent(roleId)}`, {
+    method: 'DELETE',
+  });
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (res.status === 404) throw new NotFoundError(`역할 정의 없음: ${roleId}`);
+  if (!res.ok) throw new Error(`역할 정의 삭제 실패 (${res.status})`);
+}
+
+// ── Team management ───────────────────────────────────────────────────────────
+
+export interface TeamDto {
+  teamId: string;
+  displayName: string;
+  color?: string;
+  parentTeamId?: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+export interface TeamRequest {
+  teamId?: string;
+  displayName?: string;
+  color?: string;
+  parentTeamId?: string;
+}
+
+export async function fetchTeams(): Promise<TeamDto[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/team`);
+  if (!res.ok) throw new Error(`팀 목록 조회 실패 (${res.status})`);
+  return res.json();
+}
+
+export async function createTeam(req: TeamRequest): Promise<TeamDto> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/team`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (res.status === 409) throw new Error(`이미 존재하는 팀 ID: ${req.teamId}`);
+  if (!res.ok) throw new Error(`팀 생성 실패 (${res.status})`);
+  return res.json();
+}
+
+export async function updateTeam(teamId: string, req: TeamRequest): Promise<TeamDto> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/team/${encodeURIComponent(teamId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (res.status === 404) throw new NotFoundError(`팀 없음: ${teamId}`);
+  if (!res.ok) throw new Error(`팀 수정 실패 (${res.status})`);
+  return res.json();
+}
+
+export async function deleteTeam(teamId: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/team/${encodeURIComponent(teamId)}`, {
+    method: 'DELETE',
+  });
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (res.status === 404) throw new NotFoundError(`팀 없음: ${teamId}`);
+  if (!res.ok) throw new Error(`팀 삭제 실패 (${res.status})`);
+}
+
 export class NotFoundError extends Error {
   constructor(message: string) { super(message); this.name = 'NotFoundError'; }
 }

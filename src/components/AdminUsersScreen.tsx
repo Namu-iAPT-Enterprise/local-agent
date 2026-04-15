@@ -11,9 +11,10 @@ const AdminUsers = React.lazy(() => import('../pages/settings/AdminUsers'));
 
 interface AdminUsersScreenProps {
   onBack: () => void;
+  permissionTags?: string[];
 }
 
-export default function AdminUsersScreen({ onBack }: AdminUsersScreenProps) {
+export default function AdminUsersScreen({ onBack, permissionTags = [] }: AdminUsersScreenProps) {
   const { bgImage } = useTheme();
 
   return (
@@ -50,7 +51,7 @@ export default function AdminUsersScreen({ onBack }: AdminUsersScreenProps) {
               </div>
             }
           >
-            <AdminUsers />
+            <AdminUsers permissionTags={permissionTags} />
           </Suspense>
         </div>
       </main>

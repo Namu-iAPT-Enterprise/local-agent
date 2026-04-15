@@ -149,9 +149,16 @@ export default function App() {
 
   const isLoggedIn = page !== 'login' && page !== 'signup';
   const permissions = usePermissions(isLoggedIn);
+
+  // 계정 레벨 ADMIN 이거나 역할 정의 권한이 있으면 관리 페이지 접근 허용
   const hasAdminAccess = accountRole === 'ADMIN' || permissions.enabledFeatures.includes('ROLE_DEFINE_CREATE');
+  // 역할 배정/조회/정의/팀/캐시 권한 중 하나라도 있으면 admin-users 페이지 진입 허용
+  const hasAdminUsersAccess = hasAdminAccess || ['ROLE_VIEW_ANY','ROLE_ASSIGN_ANY','ROLE_REVOKE_ANY','ROLE_CREATE','ROLE_MODIFY','ROLE_DELETE','TEAM_VIEW_ANY','TEAM_CREATE','TEAM_MANAGE_ANY','TEAM_DELETE_ANY','CACHE_RELOAD_USER','CACHE_RELOAD_ALL'].some(t => permissions.permissionTags.includes(t));
+  // 문의사항 조회 권한
+  const hasRequestsAccess = hasAdminAccess || permissions.enabledFeatures.includes('REQUEST_VIEW_ALL');
+  // 지식 관리 권한
   const hasKnowledgeAccess = accountRole === 'ADMIN'
-    || permissions.enabledFeatures.includes('KNOWLEDGE_CREATE');
+    || ['KNOWLEDGE_CREATE','KNOWLEDGE_MODIFY','KNOWLEDGE_DELETE'].some(t => permissions.enabledFeatures.includes(t));
 
   useEffect(() => {
     const handler = () => { clear(); navigateTo('login'); };
@@ -319,16 +326,16 @@ export default function App() {
   );
   if (page === 'admin-users') {
     if (permissions.status === 'idle' || permissions.status === 'loading') return null;
-    if (!hasAdminAccess) {
+    if (!hasAdminUsersAccess) {
       navigateTo('home');
       return null;
     }
-    return <AdminUsersScreen onBack={() => navigateTo('home')} />;
+    return <AdminUsersScreen onBack={() => navigateTo('home')} permissionTags={permissions.permissionTags} />;
   }
 
   if (page === 'requests') {
     if (permissions.status === 'idle' || permissions.status === 'loading') return null;
-    if (!hasAdminAccess) {
+    if (!hasRequestsAccess) {
       navigateTo('home');
       return null;
     }
@@ -392,8 +399,8 @@ export default function App() {
           enabledFeatures={permissions.enabledFeatures}
           accountRole={accountRole}
           onFeatureClick={(key) => {
-            if (key === 'ADMIN_USERS') navigateTo('admin-users');
-            if (key === 'ADMIN_REQUESTS') navigateTo('requests');
+            if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE'].includes(key)) navigateTo('admin-users');
+            if (key === 'REQUEST_VIEW_ALL') navigateTo('requests');
             if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) navigateTo('knowledge');
           }}
           userId={getUserId()}
@@ -417,8 +424,8 @@ export default function App() {
               enabledFeatures={permissions.enabledFeatures}
               accountRole={accountRole}
               onFeatureClick={(key) => {
-                if (key === 'ADMIN_USERS') { navigateTo('admin-users'); setMobileMenuOpen(false); }
-                if (key === 'ADMIN_REQUESTS') { navigateTo('requests'); setMobileMenuOpen(false); }
+                if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE'].includes(key)) { navigateTo('admin-users'); setMobileMenuOpen(false); }
+                if (key === 'REQUEST_VIEW_ALL') { navigateTo('requests'); setMobileMenuOpen(false); }
                 if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) { navigateTo('knowledge'); setMobileMenuOpen(false); }
               }}
               userId={getUserId()}

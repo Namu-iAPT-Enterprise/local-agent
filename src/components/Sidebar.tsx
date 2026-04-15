@@ -168,7 +168,8 @@ export default function Sidebar({
   const hasNoRoles = isLoaded && roleIds.length === 0;
 
   function hasFeatureAccess(f: typeof APP_FEATURES[number]): boolean {
-    if (f.adminOnly) return hasAdminAccess;
+    // adminOnly 기능은 ADMIN 계정이거나, 해당 기능의 권한 태그 중 하나라도 허용된 경우 표시
+    if (f.adminOnly) return hasAdminAccess || hasAppAccess(f.requiredFeatureKeys, allowedApis);
     return hasAppAccess(f.requiredFeatureKeys, allowedApis);
   }
 
