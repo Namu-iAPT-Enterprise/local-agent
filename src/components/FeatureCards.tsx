@@ -181,16 +181,13 @@ interface FeatureCardsProps {
   status: PermissionStatus;
   allowedApis: AllowedApi[];
   roleIds: string[];
-  accountRole: string | null;
 }
 
 export default function FeatureCards({
   status,
   allowedApis,
   roleIds,
-  accountRole,
 }: FeatureCardsProps) {
-  const isAdmin = accountRole === 'ADMIN';
 
   // Determine visible features mapped from allowedApis
   const mappedApis = allowedApis.map(api => ({ ...api, ...getMappedApiInfo(api) }));
@@ -252,11 +249,7 @@ export default function FeatureCards({
                 {role}
               </span>
             ))}
-            {isAdmin && (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/30 text-rose-500 dark:text-rose-400 border border-rose-200 dark:border-rose-800 uppercase tracking-wide">
-                ADMIN
-              </span>
-            )}
+
           </div>
         )}
       </div>

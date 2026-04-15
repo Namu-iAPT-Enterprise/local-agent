@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 // ── 코드 스플리팅 (lazy import) ────────────────────────────────────────────────
 //
 // Requests 컴포넌트는 이 화면이 실제로 렌더링될 때만 번들이 로드됩니다.
-// App.tsx 에서 hasAdminAccess 조건이 false 이면 이 컴포넌트 자체가 렌더링되지 않으므로
+// App.tsx 에서 RoleServer 권한 태그 검사를 통과해야 이 컴포넌트가 렌더링됩니다.
 // 권한 없는 클라이언트에는 Requests 코드가 전달되지 않습니다.
 const Requests = React.lazy(() => import('../pages/settings/Requests'));
 

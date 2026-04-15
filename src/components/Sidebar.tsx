@@ -51,7 +51,7 @@ interface SidebarProps {
   allowedApis?: AllowedApi[];
   roleIds?: string[];
   enabledFeatures?: string[];
-  accountRole?: string | null;
+  permissionTags?: string[];
   userId?: string | null;
   onFeatureClick?: (featureKey: string) => void;
   onRefreshPermissions?: () => void;
@@ -68,7 +68,7 @@ export default function Sidebar({
   allowedApis = [],
   roleIds = [],
   enabledFeatures = [],
-  accountRole = null,
+  permissionTags = [],
   userId = null,
   onFeatureClick,
   onRefreshPermissions,
@@ -162,20 +162,24 @@ export default function Sidebar({
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
 
-  const isAdmin = accountRole === 'ADMIN';
-  const hasAdminAccess = isAdmin || enabledFeatures.includes('ROLE_DEFINE_CREATE');
   const isLoaded = permissionsStatus === 'loaded' || permissionsStatus === 'loading';
   const hasNoRoles = isLoaded && roleIds.length === 0;
 
+  // Admin 탭 항목: 백업 관리 + 로그 조회 (GLOBAL 권한으로만 접근)
+  const ADMIN_TAB_IDS = ['admin-backup', 'admin-log'];
+
   function hasFeatureAccess(f: typeof APP_FEATURES[number]): boolean {
-    // adminOnly 기능은 ADMIN 계정이거나, 해당 기능의 권한 태그 중 하나라도 허용된 경우 표시
-    if (f.adminOnly) return hasAdminAccess || hasAppAccess(f.requiredFeatureKeys, allowedApis);
     return hasAppAccess(f.requiredFeatureKeys, allowedApis);
   }
 
-  // Apps: 권한 충족 항목만 표시
+  // Apps: 권한 충족 항목만 표시 (Admin 탭 항목은 제외)
   const appFeatures = isLoaded
-    ? APP_FEATURES.filter((f) => hasFeatureAccess(f))
+    ? APP_FEATURES.filter((f) => !ADMIN_TAB_IDS.includes(f.id) && hasFeatureAccess(f))
+    : [];
+
+  // Admin 탭: 백업 관리 + 로그 조회만 (GLOBAL 권한 필요)
+  const adminFeatures = isLoaded
+    ? APP_FEATURES.filter((f) => ADMIN_TAB_IDS.includes(f.id) && hasFeatureAccess(f))
     : [];
 
   // 권한 패널: 모든 allowedApis를 이름과 아이콘으로 매핑
@@ -184,6 +188,7 @@ export default function Sidebar({
     : [];
 
   const showApps = appFeatures.length > 0;
+  const showAdmin = adminFeatures.length > 0;
 
   return (
     <aside className={`flex flex-col h-screen flex-shrink-0 transition-all duration-200 bg-gray-100 dark:bg-gray-900 ${collapsed ? 'w-16' : 'w-72'}`}>
@@ -291,7 +296,47 @@ export default function Sidebar({
         </div>
       )}
 
-      {!collapsed && showApps && <div className="mx-3 mt-2 mb-0.5 border-t border-gray-200 dark:border-gray-700" />}
+      {/* ── Admin section ── */}
+      {showAdmin && (
+        <div className="mt-2 px-3">
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-1 py-1">
+              <div className="w-full h-px bg-gray-200 dark:bg-gray-700 mb-1" />
+              {adminFeatures.map((f) => {
+                const Icon = f.icon;
+                return (
+                  <button key={f.id} title={`${f.label} — ${f.description}`}
+                    onClick={() => onFeatureClick?.(f.requiredFeatureKeys[0])}
+                    className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer text-rose-500">
+                    <Icon size={16} />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between w-full px-1 py-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                <div className="flex items-center gap-1.5"><Shield size={12} /><span>Admin</span></div>
+              </div>
+              <div className="mt-0.5 space-y-0.5 pb-1">
+                {adminFeatures.map((f) => {
+                  const Icon = f.icon;
+                  return (
+                    <button key={f.id} title={f.description}
+                      onClick={() => onFeatureClick?.(f.requiredFeatureKeys[0])}
+                      className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-gray-700/60 transition-colors text-left cursor-pointer">
+                      <Icon size={14} className="flex-shrink-0 text-rose-500" />
+                      <span className="flex-1 text-xs font-medium truncate">{f.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!collapsed && (showApps || showAdmin) && <div className="mx-3 mt-2 mb-0.5 border-t border-gray-200 dark:border-gray-700" />}
 
       {/* Session list — flex-1 so it shrinks when profile panel expands */}
       <div className="flex-1 min-h-0 overflow-y-auto mt-1 px-2">
@@ -391,9 +436,11 @@ export default function Sidebar({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{userId ?? '—'}</p>
-                <p className={`text-[10px] font-medium ${accountRole === 'ADMIN' ? 'text-rose-500' : 'text-gray-400'}`}>
-                  {accountRole ?? '—'}
-                </p>
+                {roleIds.length > 0 && (
+                  <p className="text-[10px] font-medium text-gray-400 truncate">
+                    {roleIds.slice(0, 2).join(', ')}{roleIds.length > 2 ? ` +${roleIds.length - 2}` : ''}
+                  </p>
+                )}
               </div>
               {/* 권한 보기 토글 */}
               <button onClick={() => setRolesExpanded((v) => !v)}

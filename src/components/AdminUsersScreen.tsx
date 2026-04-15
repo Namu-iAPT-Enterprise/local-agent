@@ -5,16 +5,17 @@ import { useTheme } from '../context/ThemeContext';
 // ── 코드 스플리팅 (lazy import) ────────────────────────────────────────────────
 //
 // AdminUsers 컴포넌트는 이 화면이 실제로 렌더링될 때만 번들이 로드됩니다.
-// App.tsx 에서 hasAdminAccess 조건이 false 이면 이 컴포넌트 자체가 렌더링되지 않으므로
+// App.tsx 에서 RoleServer 권한 태그 검사를 통과해야 이 컴포넌트가 렌더링됩니다.
 // 권한 없는 클라이언트에는 AdminUsers 코드가 전달되지 않습니다.
 const AdminUsers = React.lazy(() => import('../pages/settings/AdminUsers'));
 
 interface AdminUsersScreenProps {
   onBack: () => void;
   permissionTags?: string[];
+  myRoleIds?: string[];
 }
 
-export default function AdminUsersScreen({ onBack, permissionTags = [] }: AdminUsersScreenProps) {
+export default function AdminUsersScreen({ onBack, permissionTags = [], myRoleIds = [] }: AdminUsersScreenProps) {
   const { bgImage } = useTheme();
 
   return (
@@ -38,7 +39,7 @@ export default function AdminUsersScreen({ onBack, permissionTags = [] }: AdminU
         >
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-base font-semibold text-gray-900 dark:text-white">계정 관리</h1>
+        <h1 className="text-base font-semibold text-gray-900 dark:text-white">역할 · 팀 관리</h1>
       </header>
 
       {/* 본문 */}
@@ -51,7 +52,7 @@ export default function AdminUsersScreen({ onBack, permissionTags = [] }: AdminU
               </div>
             }
           >
-            <AdminUsers permissionTags={permissionTags} />
+            <AdminUsers permissionTags={permissionTags} myRoleIds={myRoleIds} />
           </Suspense>
         </div>
       </main>

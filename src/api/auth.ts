@@ -25,14 +25,11 @@ export interface MeResponse {
 const ACCESS_KEY       = 'namu_access_token';
 const REFRESH_KEY      = 'namu_refresh_token';
 const USER_ID_KEY      = 'namu_user_id';
-const ACCOUNT_ROLE_KEY = 'namu_account_role';
 
 export function getAccessToken(): string | null    { return localStorage.getItem(ACCESS_KEY); }
 export function getRefreshToken(): string | null   { return localStorage.getItem(REFRESH_KEY); }
 export function getUserId(): string | null         { return localStorage.getItem(USER_ID_KEY); }
 export function saveUserId(userId: string)         { localStorage.setItem(USER_ID_KEY, userId); }
-export function getAccountRole(): string | null    { return localStorage.getItem(ACCOUNT_ROLE_KEY); }
-export function saveAccountRole(role: string)      { localStorage.setItem(ACCOUNT_ROLE_KEY, role); }
 
 export function saveTokens(res: AuthResponse) {
   localStorage.setItem(ACCESS_KEY,  res.accessToken);
@@ -43,7 +40,6 @@ export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_ID_KEY);
-  localStorage.removeItem(ACCOUNT_ROLE_KEY);
 }
 
 export function authHeaders(): Record<string, string> {

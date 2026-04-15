@@ -46,22 +46,17 @@ const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
 
 interface SettingsProps {
   onBack: () => void;
-  /** Account role (ADMIN shows admin tabs) */
-  accountRole?: string | null;
   /** Permission tags from role server */
   permissionTags?: string[];
   /** Enabled feature keys for this user */
   enabledFeatures?: string[];
 }
 
-export default function Settings({ onBack, accountRole = null, permissionTags = [], enabledFeatures = [] }: SettingsProps) {
+export default function Settings({ onBack, permissionTags = [], enabledFeatures = [] }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('model');
   const [collapsed, setCollapsed] = useState(false);
   const { bgImage } = useTheme();
   const { tr } = useLang();
-
-  // Show admin tab when account is ADMIN or user has admin-level features
-  const hasAdminAccess = accountRole === 'ADMIN' || enabledFeatures.includes('ROLE_DEFINE_CREATE');
 
   const tabLabels: Record<TabId, string> = {
     model: tr.model, assistants: tr.assistants, 'skills-hub': tr.skillsHub,

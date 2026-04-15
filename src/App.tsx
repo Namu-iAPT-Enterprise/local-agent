@@ -20,7 +20,7 @@ import {
   getFileBasename,
   type PendingChatAttachment,
 } from './hooks/useChat';
-import { getAccessToken, getAccountRole, saveAccountRole, logout as authLogout, getMe, getUserId } from './api/auth';
+import { getAccessToken, logout as authLogout, getUserId } from './api/auth';
 // v2: role assignment is done through AdminUsers page, not auto-created
 import type { ChatSessionInfo } from './api/chat';
 import { usePermissions } from './hooks/usePermissions';
@@ -96,7 +96,6 @@ export default function App() {
     resolveStoredSelectedModel(localStorage.getItem('namu_selected_model')),
   );
   const [sessionRefresh, setSessionRefresh] = useState(0);
-  const [accountRole, setAccountRole] = useState<string | null>(getAccountRole());
   const { bgImage } = useTheme();
   const { tr } = useLang();
   const { messages, isStreaming, send, regenerate, setVariant, prepareEdit, clear, stop, loadSession, sessionId } = useChat();
@@ -194,15 +193,10 @@ export default function App() {
   const isLoggedIn = page !== 'login' && page !== 'signup';
   const permissions = usePermissions(isLoggedIn);
 
-  // 계정 레벨 ADMIN 이거나 역할 정의 권한이 있으면 관리 페이지 접근 허용
-  const hasAdminAccess = accountRole === 'ADMIN' || permissions.enabledFeatures.includes('ROLE_DEFINE_CREATE');
-  // 역할 배정/조회/정의/팀/캐시 권한 중 하나라도 있으면 admin-users 페이지 진입 허용
-  const hasAdminUsersAccess = hasAdminAccess || ['ROLE_VIEW_ANY','ROLE_VIEW_OWN','ROLE_ASSIGN_ANY','ROLE_ASSIGN_OWN','ROLE_REVOKE_ANY','ROLE_REVOKE_OWN','ROLE_CREATE','ROLE_CREATE_OWN','ROLE_MODIFY','ROLE_MODIFY_OWN','ROLE_DELETE','ROLE_DELETE_OWN','TEAM_VIEW_ANY','TEAM_CREATE','TEAM_MANAGE_ANY','TEAM_MANAGE_OWN','TEAM_DELETE_ANY','TEAM_DELETE_OWN','CACHE_RELOAD_USER','CACHE_RELOAD_ALL'].some(t => permissions.permissionTags.includes(t));
-  // 문의사항 조회 권한
-  const hasRequestsAccess = hasAdminAccess || permissions.enabledFeatures.includes('REQUEST_VIEW_ALL');
-  // 지식 관리 권한
-  const hasKnowledgeAccess = accountRole === 'ADMIN'
-    || ['KNOWLEDGE_CREATE','KNOWLEDGE_MODIFY','KNOWLEDGE_DELETE'].some(t => permissions.enabledFeatures.includes(t));
+  // 모든 접근 제어는 RoleServer 권한 태그 기반으로만 동작
+  const hasAdminUsersAccess = ['GLOBAL_ROLE_VIEW','ROLE_VIEW_OWN','GLOBAL_ROLE_ASSIGN','ROLE_ASSIGN_OWN','GLOBAL_ROLE_REVOKE','ROLE_REVOKE_OWN','GLOBAL_ROLE_CREATE','ROLE_CREATE_OWN','GLOBAL_ROLE_MODIFY','ROLE_MODIFY_OWN','GLOBAL_ROLE_DELETE','ROLE_DELETE_OWN','TEAM_VIEW_ANY','TEAM_MEMBER_VIEW','GLOBAL_TEAM_CREATE','GLOBAL_TEAM_MANAGE','TEAM_MANAGE_OWN','GLOBAL_TEAM_DELETE','TEAM_DELETE_OWN','GLOBAL_CACHE_RELOAD_USER','GLOBAL_CACHE_RELOAD_ALL','GLOBAL_BACKUP_CREATE','GLOBAL_BACKUP_RESTORE','GLOBAL_LOG_VIEW'].some(t => permissions.permissionTags.includes(t));
+  const hasRequestsAccess = permissions.enabledFeatures.includes('GLOBAL_REQUEST_VIEW');
+  const hasKnowledgeAccess = ['KNOWLEDGE_CREATE','KNOWLEDGE_MODIFY','KNOWLEDGE_DELETE'].some(t => permissions.enabledFeatures.includes(t));
 
   useEffect(() => {
     const handler = () => { clear(); navigateTo('login'); };
@@ -210,17 +204,7 @@ export default function App() {
     return () => window.removeEventListener('auth:expired', handler);
   }, [clear]);
 
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    getMe()
-      .then((me) => {
-        saveAccountRole(me.role);
-        setAccountRole(me.role);
-      })
-      .catch(() => {
-        // keep cached role on failure
-      });
-  }, [isLoggedIn]);
+  // accountRole 조회 제거 — 모든 UI 접근 제어는 RoleServer 권한 태그 기반
 
   const prevStreaming = useRef(false);
   useEffect(() => {
@@ -242,7 +226,6 @@ export default function App() {
     await authLogout();
     clear();
     setPendingAttachments([]);
-    setAccountRole(null);
     navigateTo('login');
   };
 
@@ -363,7 +346,6 @@ export default function App() {
   if (page === 'settings') return (
     <Settings
       onBack={() => navigateTo('home')}
-      accountRole={accountRole}
       permissionTags={permissions.permissionTags}
       enabledFeatures={permissions.enabledFeatures}
     />
@@ -374,7 +356,7 @@ export default function App() {
       navigateTo('home');
       return null;
     }
-    return <AdminUsersScreen onBack={() => navigateTo('home')} permissionTags={permissions.permissionTags} />;
+    return <AdminUsersScreen onBack={() => navigateTo('home')} permissionTags={permissions.permissionTags} myRoleIds={permissions.roleIds} />;
   }
 
   if (page === 'requests') {
@@ -441,10 +423,10 @@ export default function App() {
           allowedApis={permissions.allowedApis}
           roleIds={permissions.roleIds}
           enabledFeatures={permissions.enabledFeatures}
-          accountRole={accountRole}
+          permissionTags={permissions.permissionTags}
           onFeatureClick={(key) => {
-            if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE'].includes(key)) navigateTo('admin-users');
-            if (key === 'REQUEST_VIEW_ALL') navigateTo('requests');
+            if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE', 'GLOBAL_TEAM_CREATE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_DELETE', 'GLOBAL_BACKUP_CREATE', 'GLOBAL_LOG_VIEW'].includes(key)) navigateTo('admin-users');
+            if (key === 'GLOBAL_REQUEST_VIEW') navigateTo('requests');
             if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) navigateTo('knowledge');
           }}
           userId={getUserId()}
@@ -466,10 +448,10 @@ export default function App() {
               allowedApis={permissions.allowedApis}
               roleIds={permissions.roleIds}
               enabledFeatures={permissions.enabledFeatures}
-              accountRole={accountRole}
+              permissionTags={permissions.permissionTags}
               onFeatureClick={(key) => {
-                if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE'].includes(key)) { navigateTo('admin-users'); setMobileMenuOpen(false); }
-                if (key === 'REQUEST_VIEW_ALL') { navigateTo('requests'); setMobileMenuOpen(false); }
+                if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE', 'GLOBAL_TEAM_CREATE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_DELETE', 'GLOBAL_BACKUP_CREATE', 'GLOBAL_LOG_VIEW'].includes(key)) { navigateTo('admin-users'); setMobileMenuOpen(false); }
+                if (key === 'GLOBAL_REQUEST_VIEW') { navigateTo('requests'); setMobileMenuOpen(false); }
                 if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) { navigateTo('knowledge'); setMobileMenuOpen(false); }
               }}
               userId={getUserId()}

@@ -31,6 +31,7 @@ export interface RolePermissionsResponse {
 export interface RoleGetResponse {
   userId: string;
   permissionTags: string[];
+  roleIds: string[];
 }
 
 // ── Permission Tag types ──────────────────────────────────────────────────
@@ -53,6 +54,7 @@ export interface RoleDefinitionDto {
   type: 'PERMISSION' | 'TEAM' | 'TAG';
   teamId?: string;
   parentRoleId?: string;
+  priority: number;
   adminAccountRequired: boolean;
   system: boolean;
   createdBy?: string;
@@ -71,7 +73,7 @@ export async function fetchRolePermissions(): Promise<RolePermissionsResponse> {
 
 /**
  * GET /api/management/role/get?userId=
- * Returns the user's permission tags. Requires ROLE_VIEW_ANY tag for other users.
+ * Returns the user's permission tags. Requires GLOBAL_ROLE_VIEW tag for other users.
  */
 export async function fetchUserPermissionTags(userId: string): Promise<RoleGetResponse> {
   const res = await fetchWithAuth(`${API_BASE}/api/management/role/get?userId=${encodeURIComponent(userId)}`);
@@ -83,7 +85,7 @@ export async function fetchUserPermissionTags(userId: string): Promise<RoleGetRe
 
 /**
  * POST /api/management/role/assign
- * Assigns a role to a user. Requires ROLE_ASSIGN_ANY + ADMIN + manageableBy.
+ * Assigns a role to a user. Requires GLOBAL_ROLE_ASSIGN + ADMIN + manageableBy.
  */
 export async function assignRole(userId: string, roleId: string): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/management/role/assign`, {
@@ -97,7 +99,7 @@ export async function assignRole(userId: string, roleId: string): Promise<void> 
 
 /**
  * DELETE /api/management/role/revoke
- * Revokes a role from a user. Requires ROLE_REVOKE_ANY + ADMIN + manageableBy.
+ * Revokes a role from a user. Requires GLOBAL_ROLE_REVOKE + ADMIN + manageableBy.
  */
 export async function revokeRole(userId: string, roleId: string): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/management/role/revoke`, {
@@ -208,6 +210,28 @@ export async function deleteRoleDefinition(roleId: string): Promise<void> {
   if (res.status === 403) throw new Error('접근 권한이 없습니다.');
   if (res.status === 404) throw new NotFoundError(`역할 정의 없음: ${roleId}`);
   if (!res.ok) throw new Error(`역할 정의 삭제 실패 (${res.status})`);
+}
+
+export interface TeamMemberInfo {
+  userId: string;
+  roleIds: string[];
+}
+
+export async function fetchTeamMembers(teamId: string): Promise<TeamMemberInfo[]> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/team/${encodeURIComponent(teamId)}/members`);
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (!res.ok) throw new Error(`팀 구성원 조회 실패 (${res.status})`);
+  return res.json();
+}
+
+export async function reorderRoles(teamId: string, orderedRoleIds: string[]): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define/reorder?teamId=${encodeURIComponent(teamId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(orderedRoleIds),
+  });
+  if (res.status === 403) throw new Error('접근 권한이 없습니다.');
+  if (!res.ok) throw new Error(`우선순위 변경 실패 (${res.status})`);
 }
 
 // ── Team management ───────────────────────────────────────────────────────────
