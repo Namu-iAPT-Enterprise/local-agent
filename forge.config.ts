@@ -35,12 +35,9 @@ const config: ForgeConfig = {
           target: 'preload',
         },
       ],
-      renderer: [
-        {
-          name: 'main_window',
-          config: 'vite.renderer.config.ts',
-        },
-      ],
+      // renderer 없음 — UI는 외부 Next.js 서버(namu-localAgent)가 제공.
+      // main.ts 는 MAIN_WINDOW_VITE_DEV_SERVER_URL 대신 APP_URL 환경변수를 사용.
+      renderer: [],
     }),
     // Fuses are used to enable/disable various Electron functionality
     // at package time, before code signing the application
@@ -50,8 +47,12 @@ const config: ForgeConfig = {
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
-      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
-      [FuseV1Options.OnlyLoadAppFromAsar]: true,
+      // 개발 중에는 코드가 ASAR이 아닌 .vite/build/ 에서 로드되므로
+      // 아래 두 항목을 활성화하면 electron-forge start 시 즉시 종료됨.
+      // 패키징(make/package) 단계에서만 true로 설정해야 하나,
+      // FusesPlugin은 start 시에도 로컬 바이너리를 패치하므로 개발용으로는 false 유지.
+      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: false,
+      [FuseV1Options.OnlyLoadAppFromAsar]: false,
     }),
   ],
 };
