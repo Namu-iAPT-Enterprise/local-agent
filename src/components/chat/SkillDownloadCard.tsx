@@ -4,6 +4,7 @@ import { markdownToDocxBlob, extractMarkdownTitle, downloadBlob } from '../../ut
 import { markdownToPptxBlob, extractPresentationTitle } from '../../utils/markdownToPptx';
 import { markdownToXlsxBlob } from '../../utils/markdownToXlsx';
 import { markdownToHwpxBlob } from '../../utils/markdownToHwpx';
+import { normalizeLlmMarkdownForExport } from '../../utils/llmMarkdownNormalize';
 
 interface SkillDownloadCardProps {
   content: string;
@@ -64,11 +65,12 @@ export function SkillDownloadCard({ content, skillType }: SkillDownloadCardProps
   const [error, setError] = useState<string | null>(null);
   const meta = SKILL_META[skillType];
 
-  // Pick the right title extractor per type
+  // Titles from normalized markdown so filenames match exported structure
+  const normalized = normalizeLlmMarkdownForExport(content);
   const rawTitle =
     skillType === 'pptx'
-      ? extractPresentationTitle(content, 'presentation')
-      : extractMarkdownTitle(content, 'document');
+      ? extractPresentationTitle(normalized, 'presentation')
+      : extractMarkdownTitle(normalized, 'document');
 
   const safeFilename = rawTitle
     .replace(/[^\w\s-]/g, '')

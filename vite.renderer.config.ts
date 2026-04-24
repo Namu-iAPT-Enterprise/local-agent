@@ -19,5 +19,16 @@ export default defineConfig({
     },
     // HWPX: dev calls `http://<host>:8789/convert` directly (see markdownToHwpx.ts). Optional proxy if needed:
     // proxy: { '/hwpx-converter': { target: 'http://127.0.0.1:8789', changeOrigin: true, rewrite: (p) => p.replace(/^\/hwpx-converter/, '') || '/' } },
+    //
+    // Ollama proxy: browser fetches /ollama-proxy/* → Vite forwards to 127.0.0.1:11434
+    // This avoids CORS when the browser accesses the app from a LAN IP (e.g. 192.168.0.34:5173)
+    // instead of localhost — browser-side fetch to 127.0.0.1 would hit the wrong machine.
+    proxy: {
+      '/ollama-proxy': {
+        target: 'http://127.0.0.1:11434',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/ollama-proxy/, ''),
+      },
+    },
   },
 });

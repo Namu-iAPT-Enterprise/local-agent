@@ -1,5 +1,5 @@
 import { FileText } from 'lucide-react';
-import MarkdownRenderer from '../MarkdownRenderer';
+import ChatMarkdown from '../ChatMarkdown';
 import { stripFileBlocksForEdit, type UserAttachmentDisplay } from '../../hooks/useChat';
 import { detectCodeLanguage } from './detectCodeLanguage';
 
@@ -39,7 +39,7 @@ export function UserMessage({ content, attachments }: { content: string; attachm
         {attachmentRow}
         <div className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-br-sm overflow-hidden">
           <div className="px-4 py-3">
-            <MarkdownRenderer content={mdContent} />
+            <ChatMarkdown content={mdContent} />
           </div>
         </div>
       </div>

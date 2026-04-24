@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { postChatMessage, streamChatSession, getChatHistory, type ChatImagePart } from '../api/chat';
+import { LLM_MARKDOWN_STRUCTURE_HINT } from '../utils/llmMarkdownNormalize';
 import { isOllamaOpenAICompatUrl } from '../api/openaiClient';
 // ── Smart thinking suppression ────────────────────────────────────────────────
 
@@ -62,6 +63,30 @@ export function shouldThink(message: string, thinkingEnabled: boolean): boolean 
 
   // Rule 4: longer message → trust the toggle
   return true;
+}
+
+const CARD_LAYOUT_HINT = [
+  'Output card-format requirements (required):',
+  '- Return exactly 7 numbered cards.',
+  '- Card 1 must be the summary card.',
+  '- Cards 2-7 must each cover a distinct topic; do not stop early.',
+  '- Format each card as a heading like "1) Title" on its own line.',
+  '- Under each card, include exactly 3 bullet points.',
+  '- Keep each bullet concise (1-2 short sentences) to avoid truncation.',
+  '- Do not add intro/outro text before or after the 7 cards.',
+].join('\n');
+
+function wantsSevenCardSummaryLayout(message: string): boolean {
+  const lower = message.toLowerCase();
+  const mentionsCards = /\bcard(s)?\b/i.test(lower) || /카드/.test(message);
+  const mentionsCount = /\b7\b|\bseven\b/i.test(lower) || /7개|일곱/.test(message);
+  const mentionsSummary = /\bsummary\b/i.test(lower) || /요약/.test(message);
+  return mentionsCards && (mentionsCount || mentionsSummary);
+}
+
+function withSevenCardSummaryLayout(prompt: string, userMessage: string): string {
+  if (!wantsSevenCardSummaryLayout(userMessage)) return prompt;
+  return `${prompt}\n\n${CARD_LAYOUT_HINT}`;
 }
 
 export interface ModelOption {
@@ -456,17 +481,20 @@ function friendlyError(raw: string): string {
     return 'Browser could not reach the API (often CORS). The provider must allow requests from this app’s origin, or use a local proxy.';
   return raw;
 }
+/** Parse <think>...</redacted_thinking> from a raw accumulated string. */
+const THINK_OPEN = '<think>';
+const THINK_CLOSE = '</think>';
 
-/** Parse <think>...</think> from a raw accumulated string. */
 function parseRaw(raw: string): { thinking: string; content: string } {
-  if (!raw.startsWith('<think>')) return { thinking: '', content: raw };
-  const closeIdx = raw.indexOf('</think>');
-  if (closeIdx === -1) return { thinking: raw.slice(6), content: '' };
+  if (!raw.startsWith(THINK_OPEN)) return { thinking: '', content: raw };
+  const closeIdx = raw.indexOf(THINK_CLOSE);
+  if (closeIdx === -1) return { thinking: raw.slice(THINK_OPEN.length), content: '' };
   return {
-    thinking: raw.slice(6, closeIdx).trim(),
-    content: raw.slice(closeIdx + 8).trimStart(),
+    thinking: raw.slice(THINK_OPEN.length, closeIdx).trim(),
+    content: raw.slice(closeIdx + THINK_CLOSE.length).trimStart(),
   };
 }
+
 
 // ── Session→model persistence ─────────────────────────────────────────────────
 
@@ -573,12 +601,21 @@ export function useChat() {
     // When a skill is active, strip the /skill-name prefix from the user bubble
     // and inject a document-creation hint for the API call.
     const SKILL_PROMPTS: Record<string, string> = {
-      docx: 'You are creating a Word document. Respond with well-structured Markdown: use # headings, **bold**, bullet lists, and numbered lists where appropriate. Do NOT include any prose like "Here is your document" — output only the document content.',
-      pptx: 'You are creating a PowerPoint presentation. Structure your response as Markdown:\n- Use "# Title" for the presentation title (first line only)\n- Use "## Slide Title" for each slide (one ## per slide)\n- Under each slide, use bullet points (- item) for content\n- Keep bullets short (one idea per bullet, max ~8 words)\n- Aim for 5–10 slides total\n- Do NOT include any prose outside the structure — output only the slide content.',
-      xlsx: 'You are creating an Excel spreadsheet. Respond with Markdown tables representing the spreadsheet data.',
-      pdf:  'You are creating a PDF document. Respond with well-structured Markdown.',
+      docx:
+        'You are creating a Word document. Respond with well-structured Markdown: use # headings, **bold**, bullet lists, and numbered lists where appropriate. Do NOT include any prose like "Here is your document" — output only the document content.\n\n' +
+        LLM_MARKDOWN_STRUCTURE_HINT,
+      pptx:
+        'You are creating a PowerPoint presentation. Structure your response as Markdown:\n- Use "# Title" for the presentation title (first line only)\n- Use "## Slide Title" for each slide (one ## per slide)\n- Under each slide, use bullet points (- item) for content\n- Keep bullets short (one idea per bullet, max ~8 words)\n- Aim for 5–10 slides total\n- Do NOT include any prose outside the structure — output only the slide content.\n\n' +
+        LLM_MARKDOWN_STRUCTURE_HINT,
+      xlsx:
+        'You are creating an Excel spreadsheet. Respond with Markdown tables representing the spreadsheet data.\n\n' +
+        LLM_MARKDOWN_STRUCTURE_HINT,
+      pdf:
+        'You are creating a PDF document. Respond with well-structured Markdown.\n\n' +
+        LLM_MARKDOWN_STRUCTURE_HINT,
       hwpx:
-        'You are drafting content suitable for a Korean 한글 / HWPX document (보고서, 공문, 기안문). Follow the hwpx skill: clear # 제목, **강조**, bullet/numbered lists, formal tone where appropriate. Output only the document body in Markdown — no meta commentary. The download card builds a real .hwpx (python-hwpx + namespace fix) via the local converter service.',
+        'You are drafting content suitable for a Korean 한글 / HWPX document (보고서, 공문, 기안문). Follow the hwpx skill: clear # 제목, **강조**, bullet/numbered lists, formal tone where appropriate. Output only the document body in Markdown — no meta commentary. The download card builds a real .hwpx (python-hwpx + namespace fix) via the local converter service.\n\n' +
+        LLM_MARKDOWN_STRUCTURE_HINT,
     };
 
     let effectiveApiCaption = apiCaption;
@@ -591,6 +628,8 @@ export function useChat() {
         ? `${hint}\n\nUser request: ${userCaption.replace(/^\/\w+\s*/, '').trim()}`
         : apiCaption;
     }
+
+    effectiveApiCaption = withSevenCardSummaryLayout(effectiveApiCaption, effectiveUserCaption);
 
     const builtUiSkill = detectedSkill ? buildOutgoing(effectiveUserCaption, pending, model) : builtUi;
     const builtApiSkill = detectedSkill ? buildOutgoing(effectiveApiCaption, pending, model) : builtApi;

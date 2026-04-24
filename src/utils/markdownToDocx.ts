@@ -19,6 +19,8 @@ import {
   PageNumber,
 } from 'docx';
 
+import { normalizeLlmMarkdownForExport } from './llmMarkdownNormalize';
+
 // ── Pre-processing: normalise AI output before line-splitting ──────────────────
 // AI models often emit markdown without proper newlines. These fixups ensure
 // the line-by-line parser sees cleanly separated blocks.
@@ -189,7 +191,7 @@ export function extractMarkdownTitle(markdown: string, fallback = 'Document'): s
 }
 
 export async function markdownToDocxBlob(markdown: string): Promise<Blob> {
-  const normalized = preprocess(markdown);
+  const normalized = preprocess(normalizeLlmMarkdownForExport(markdown));
   const lines = normalized.split('\n');
   const paragraphs: Paragraph[] = [];
   let inCodeBlock = false;

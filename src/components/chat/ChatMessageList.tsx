@@ -1,5 +1,5 @@
 import type React from 'react';
-import MarkdownRenderer from '../MarkdownRenderer';
+import ChatMarkdown from '../ChatMarkdown';
 import ThinkingBlock from '../ThinkingBlock';
 import { UserMessage } from './UserMessage';
 import { UserMessageActions, AssistantMessageActions } from './MessageActions';
@@ -88,7 +88,10 @@ export function ChatMessageList({
                       )}
                       {msg.content ? (
                         <>
-                          <MarkdownRenderer content={msg.content} />
+                          <ChatMarkdown
+                            content={msg.content}
+                            streaming={Boolean(isStreaming && isLast)}
+                          />
                           {/* When a slash-skill was used and streaming is done, append download card */}
                           {msg.skillType && !(isStreaming && isLast) && (
                             <div className="mt-4">

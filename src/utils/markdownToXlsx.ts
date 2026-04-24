@@ -3,6 +3,7 @@
  */
 import * as XLSX from 'xlsx';
 import { fixGfmTableGlue } from './markdownTableNormalize';
+import { normalizeLlmMarkdownForExport } from './llmMarkdownNormalize';
 
 function splitTableRow(line: string): string[] {
   let s = line.trim();
@@ -66,7 +67,7 @@ function extractTables(markdown: string): string[][][] {
 }
 
 export async function markdownToXlsxBlob(markdown: string): Promise<Blob> {
-  const tables = extractTables(markdown);
+  const tables = extractTables(normalizeLlmMarkdownForExport(markdown));
   const wb = XLSX.utils.book_new();
 
   if (tables.length === 0) {

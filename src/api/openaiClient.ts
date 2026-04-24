@@ -4,6 +4,34 @@ export function normalizeOpenAIBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/$/, '');
 }
 
+/**
+ * If the URL points to a local Ollama instance (127.0.0.1:11434 or localhost:11434),
+ * rewrite it to use the Vite dev-server proxy path (/ollama-proxy).
+ *
+ * This is needed when the browser accesses the app from a LAN IP (e.g. 192.168.0.34:5173):
+ * a browser-side fetch to http://127.0.0.1:11434 would hit the *browser device's* localhost,
+ * not the Mac running Ollama — and would be blocked by CORS anyway.
+ * The Vite proxy forwards /ollama-proxy/* → http://127.0.0.1:11434 server-side (no CORS).
+ */
+export function resolveOllamaProxyUrl(baseUrl: string): string {
+  const normalized = normalizeOpenAIBaseUrl(baseUrl);
+  try {
+    const u = new URL(normalized);
+    if (
+      (u.hostname === '127.0.0.1' || u.hostname === 'localhost') &&
+      (u.port === '11434' || u.pathname.includes('11434'))
+    ) {
+      // Replace origin with proxy path; keep any sub-path (e.g. /v1)
+      return `/ollama-proxy${u.pathname}`;
+    }
+  } catch {
+    if (/127\.0\.0\.1:11434|localhost:11434/.test(normalized)) {
+      return normalized.replace(/https?:\/\/(127\.0\.0\.1|localhost):11434/, '/ollama-proxy');
+    }
+  }
+  return normalized;
+}
+
 /** Local Ollama OpenAI-compat endpoint — no API key required. */
 export function isOllamaOpenAICompatUrl(baseUrl: string): boolean {
   const s = baseUrl.trim().toLowerCase();
@@ -29,7 +57,7 @@ export async function testOpenAICompatibleConnection(
   apiKey: string,
   _modelName: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const base = normalizeOpenAIBaseUrl(baseUrl);
+  const base = resolveOllamaProxyUrl(baseUrl);
   if (!base) return { ok: false, error: 'Base URL is required' };
   try {
     const headers: Record<string, string> = {};
@@ -61,7 +89,7 @@ export async function* streamOpenAICompatibleChat(params: {
   messages: OpenAIChatMessage[];
   signal?: AbortSignal;
 }): AsyncGenerator<StreamEvent> {
-  const url = `${normalizeOpenAIBaseUrl(params.baseUrl)}/chat/completions`;
+  const url = `${resolveOllamaProxyUrl(params.baseUrl)}/chat/completions`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',

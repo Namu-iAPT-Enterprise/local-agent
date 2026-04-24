@@ -211,8 +211,12 @@ export default function App() {
   useEffect(() => {
     if (prevStreaming.current && !isStreaming) {
       textareaRef.current?.focus();
-      const timer = setTimeout(() => setSessionRefresh((n) => n + 1), 800);
-      return () => clearTimeout(timer);
+      // Refresh the session list immediately when output finishes, then once more
+      // shortly after to pick up backend persistence lag.
+      setSessionRefresh((n) => n + 1);
+      prevStreaming.current = isStreaming;
+      const timer = window.setTimeout(() => setSessionRefresh((n) => n + 1), 800);
+      return () => window.clearTimeout(timer);
     }
     prevStreaming.current = isStreaming;
   }, [isStreaming]);

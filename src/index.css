@@ -1,41 +1,69 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Markdown renderer resets */
-.markdown-body > *:first-child { margin-top: 0 !important; }
-.markdown-body > *:last-child  { margin-bottom: 0 !important; }
+/* App tokens (chat UI, panels) */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --radius: 0.625rem;
+}
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --radius: 0.625rem;
+}
 
-/* Nested lists — spacing without breaking task lists */
-.markdown-body ul ul,
-.markdown-body ul ol,
-.markdown-body ol ul,
-.markdown-body ol ol {
+/* Chat markdown (react-markdown + remark-gfm) — layout isolation + task lists */
+.chat-markdown > *:first-child { margin-top: 0 !important; }
+.chat-markdown > *:last-child  { margin-bottom: 0 !important; }
+.chat-markdown ul ul,
+.chat-markdown ul ol,
+.chat-markdown ol ul,
+.chat-markdown ol ol {
   margin-top: 0.35rem;
   margin-bottom: 0.35rem;
 }
-.markdown-body .contains-task-list .contains-task-list {
+.chat-markdown .contains-task-list .contains-task-list {
   margin-top: 0.35rem;
 }
-.markdown-body .task-list-item input[type="checkbox"] {
+.chat-markdown .task-list-item input[type="checkbox"] {
   margin-top: 0.28rem;
   flex-shrink: 0;
   accent-color: rgb(37 99 235);
 }
-.dark .markdown-body .task-list-item input[type="checkbox"] {
+.dark .chat-markdown .task-list-item input[type="checkbox"] {
   accent-color: rgb(96 165 250);
 }
-
-/* Ordered list + nested bullets (e.g. vocabulary: 1. term → Definition / Example) */
-.markdown-body ol > li > p {
+.chat-markdown ol > li > p {
   margin-bottom: 0.35rem;
 }
-.markdown-body ol > li > p:last-child {
+.chat-markdown ol > li > p:last-child {
   margin-bottom: 0;
 }
-.markdown-body ol > li > ul,
-.markdown-body ol > li > ol {
+.chat-markdown ol > li > ul,
+.chat-markdown ol > li > ol {
   margin-top: 0.4rem;
   margin-bottom: 0.5rem;
+}
+.chat-markdown table {
+  table-layout: fixed;
+  width: 100%;
 }
 
 /* Hide scrollbar while keeping scroll behaviour */

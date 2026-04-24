@@ -15,6 +15,7 @@
  */
 
 import PptxGenJS from 'pptxgenjs';
+import { normalizeLlmMarkdownForExport } from './llmMarkdownNormalize';
 
 type PptxInstance = InstanceType<typeof PptxGenJS>;
 
@@ -312,12 +313,13 @@ export function extractPresentationTitle(markdown: string, fallback = 'Presentat
 }
 
 export async function markdownToPptxBlob(markdown: string): Promise<Blob> {
+  const md = normalizeLlmMarkdownForExport(markdown);
   const pres = new PptxGenJS();
   pres.layout = 'LAYOUT_16x9';
   pres.author  = 'Namu AI';
-  pres.title   = extractPresentationTitle(markdown);
+  pres.title   = extractPresentationTitle(md);
 
-  const slides = parseSlides(markdown);
+  const slides = parseSlides(md);
 
   // If there's only content slides and no title slide, prepend one
   const hasTitleSlide = slides.some((s) => s.isTitle);

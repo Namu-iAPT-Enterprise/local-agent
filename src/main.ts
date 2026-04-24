@@ -140,6 +140,7 @@ ipcMain.handle('read-file', async (_event, filePath: string) => {
   }
 });
 
+<<<<<<< Updated upstream
 /** 바이너리 파일을 Base64로 읽기 (PDF, 이미지 등) */
 ipcMain.handle('read-file-base64', async (_event, filePath: string) => {
   try {
@@ -166,3 +167,47 @@ function guessMimeType(filePath: string): string {
   };
   return map[ext] ?? 'application/octet-stream';
 }
+=======
+/** Resolve paths where debug NDJSON can be appended (cwd is unreliable when launching from GUI). */
+function getDebugSessionLogPaths(): string[] {
+  const out: string[] = [];
+  try {
+    out.push(path.join(app.getPath('userData'), 'debug-acc65e.log'));
+  } catch {
+    // ignore
+  }
+  try {
+    out.push(path.join(process.cwd(), '.cursor', 'debug-acc65e.log'));
+  } catch {
+    // ignore
+  }
+  try {
+    let dir: string = __dirname;
+    for (let i = 0; i < 8; i++) {
+      if (fs.existsSync(path.join(dir, 'package.json'))) {
+        out.push(path.join(dir, '.cursor', 'debug-acc65e.log'));
+        break;
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  } catch {
+    // ignore
+  }
+  return [...new Set(out)];
+}
+
+/** Append one NDJSON line for debug sessions (renderer cannot write the workspace file directly). */
+ipcMain.handle('debug-session-log', (_event, line: string) => {
+  const lineOut = line.endsWith('\n') ? line : `${line}\n`;
+  for (const logPath of getDebugSessionLogPaths()) {
+    try {
+      fs.mkdirSync(path.dirname(logPath), { recursive: true });
+      fs.appendFileSync(logPath, lineOut, 'utf8');
+    } catch {
+      // try next
+    }
+  }
+});
+>>>>>>> Stashed changes

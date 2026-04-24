@@ -7,6 +7,7 @@
  * - **Override:** `VITE_HWPX_CONVERTER_URL` = full base URL, no trailing slash.
  */
 import { API_BASE } from '../config/apiBase';
+import { normalizeLlmMarkdownForExport } from './llmMarkdownNormalize';
 
 function hwpxConverterBase(): string {
   const v = (import.meta.env.VITE_HWPX_CONVERTER_URL as string | undefined)?.trim();
@@ -29,11 +30,12 @@ export async function markdownToHwpxBlob(markdown: string): Promise<Blob> {
         'or set VITE_HWPX_CONVERTER_URL / ensure VITE_API_BASE points at main-server with HWPX enabled.',
     );
   }
+  const md = normalizeLlmMarkdownForExport(markdown);
   const url = `${base}/convert`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markdown }),
+    body: JSON.stringify({ markdown: md }),
   });
   if (!res.ok) {
     const t = await res.text().catch(() => '');

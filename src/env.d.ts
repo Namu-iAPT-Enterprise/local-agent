@@ -20,9 +20,11 @@ interface ImportMetaEnv {
 }
 
 interface Window {
-  electronAPI: {
+  electronAPI?: {
     getLocalIP: () => Promise<string>;
     openFileDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
     readFile: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+    /** NDJSON line for `.cursor/debug-acc65e.log` (main process append). */
+    debugSessionLog?: (line: string) => Promise<void>;
   };
 }

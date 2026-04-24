@@ -22,17 +22,6 @@ const templates: Template[] = [
     ),
   },
   {
-    id: 'image-understanding',
-    title: 'Image Understanding',
-    description: 'How to make this dish?',
-    previewBg: 'bg-amber-50',
-    previewContent: (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-4xl">🍖</div>
-      </div>
-    ),
-  },
-  {
     id: 'html-generation-1',
     title: 'HTML Generation',
     description: 'Based on this image, create an HTML webpage.',
