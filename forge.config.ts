@@ -35,9 +35,15 @@ const config: ForgeConfig = {
           target: 'preload',
         },
       ],
-      // renderer 없음 — UI는 외부 Next.js 서버(namu-localAgent)가 제공.
-      // main.ts 는 MAIN_WINDOW_VITE_DEV_SERVER_URL 대신 APP_URL 환경변수를 사용.
-      renderer: [],
+      // 로컬 React/Vite 렌더러 사용. main.ts 는 MAIN_WINDOW_VITE_DEV_SERVER_URL
+      // (개발) 또는 빌드된 index.html (운영) 을 로드합니다.
+      // 외부 Next.js (namu-localAgent) 를 사용하려면 main.ts 에서 APP_URL 분기를 활성화하세요.
+      renderer: [
+        {
+          name: 'main_window',
+          config: 'vite.renderer.config.ts',
+        },
+      ],
     }),
     // Fuses are used to enable/disable various Electron functionality
     // at package time, before code signing the application

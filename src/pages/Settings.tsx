@@ -9,6 +9,7 @@ import {
   Globe,
   LayoutGrid,
   Info,
+  Code2,
   Moon,
   ArrowLeft,
   PanelLeftClose,
@@ -26,20 +27,21 @@ import System from './settings/System';
 import About from './settings/About';
 import AdminUsers from './settings/AdminUsers';
 import Requests from './settings/Requests';
+import WidgetEmbed from './settings/WidgetEmbed';
 
-const BASE_TAB_IDS = ['model','assistants','skills-hub','display','remote','system','about'] as const;
+const BASE_TAB_IDS = ['model','assistants','skills-hub','display','remote','system','widget-embed','about'] as const;
 type BaseTabId = typeof BASE_TAB_IDS[number];
 type TabId = BaseTabId | 'admin-users' | 'requests';
 
 const TAB_ICONS: Record<TabId, React.ElementType> = {
   model: Cpu, assistants: Users, 'skills-hub': Zap, display: Monitor,
-  remote: Globe, system: LayoutGrid, about: Info,
+  remote: Globe, system: LayoutGrid, 'widget-embed': Code2, about: Info,
   'admin-users': ShieldCheck,
   'requests': Inbox,
 };
 const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
   model: Model, assistants: Assistants, 'skills-hub': SkillsHub, display: Display,
-  remote: Remote, system: System, about: About,
+  remote: Remote, system: System, 'widget-embed': WidgetEmbed, about: About,
   'admin-users': AdminUsers,
   'requests': Requests,
 };
@@ -60,7 +62,7 @@ export default function Settings({ onBack, permissionTags = [], enabledFeatures 
 
   const tabLabels: Record<TabId, string> = {
     model: tr.model, assistants: tr.assistants, 'skills-hub': tr.skillsHub,
-    display: tr.display, remote: tr.remote, system: tr.system, about: tr.about,
+    display: tr.display, remote: tr.remote, system: tr.system, 'widget-embed': 'Widget Embed', about: tr.about,
     'admin-users': 'Admin Users',
     'requests': 'Requests',
   };

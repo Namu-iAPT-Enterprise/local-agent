@@ -8,7 +8,6 @@ import { contextBridge, ipcRenderer } from 'electron';
 // Next.js 프로젝트(namu-localAgent)의 types/electron.d.ts 에 아래 타입을 선언하세요.
 
 contextBridge.exposeInMainWorld('electronAPI', {
-<<<<<<< Updated upstream
   /** 로컬 LAN IPv4 주소 반환 */
   getLocalIP: (): Promise<string> =>
     ipcRenderer.invoke('get-local-ip'),
@@ -32,10 +31,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /** Electron 앱 버전 */
   getAppVersion: (): Promise<string> =>
     ipcRenderer.invoke('get-app-version'),
-=======
-  getLocalIP: () => ipcRenderer.invoke('get-local-ip'),
-  openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
-  readFile: (filePath: string) => ipcRenderer.invoke('read-file', filePath),
-  debugSessionLog: (line: string) => ipcRenderer.invoke('debug-session-log', line),
->>>>>>> Stashed changes
+
+  /** Append one NDJSON debug line (main process writes to disk). */
+  debugSessionLog: (line: string): Promise<unknown> =>
+    ipcRenderer.invoke('debug-session-log', line),
 });

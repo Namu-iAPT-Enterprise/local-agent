@@ -8,17 +8,19 @@ if (started) app.quit();
 
 // ── Target URL ────────────────────────────────────────────────────────────────
 //
-// 개발: APP_URL=http://localhost:3000  (Next.js dev server)
-// 운영: APP_URL=https://agent.internal (배포된 Next.js 서버, 내부망 HTTPS)
+// 기본: 로컬 React/Vite 렌더러 사용 (electron-forge plugin-vite 가
+//   MAIN_WINDOW_VITE_DEV_SERVER_URL / MAIN_WINDOW_VITE_NAME 을 주입함)
 //
-// .env 또는 shell 환경변수로 주입. electron-forge start 시 process.env로 읽힘.
+// 외부 Next.js 서버를 사용하려면 APP_URL 환경변수를 명시적으로 지정:
+//   APP_URL=http://localhost:3000 npm start
+//   APP_URL=https://agent.internal NODE_ENV=production electron-forge start
 //
-// [리팩토링 메모]
-// 이 프로젝트는 기존 React/Vite 렌더러를 제거하고 Electron 셸 전용으로 전환되었습니다.
-// UI(React 컴포넌트)는 namu-localAgent (Next.js) 프로젝트로 이전하세요.
-// Electron은 해당 Next.js 서버 URL을 BrowserWindow로 로드하는 역할만 수행합니다.
+// APP_URL 이 설정되어 있으면 Vite 개발 URL 보다 우선합니다.
 
-const APP_URL = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+// MAIN_WINDOW_VITE_DEV_SERVER_URL / MAIN_WINDOW_VITE_NAME 은 forge.env.d.ts 에서 글로벌로 선언됨.
+// (개발 모드에서만 dev server URL 이 정의되고, 운영 모드에서는 undefined)
+
+const APP_URL_OVERRIDE = process.env.APP_URL?.replace(/\/$/, '') || undefined;
 
 // ── SSL ───────────────────────────────────────────────────────────────────────
 const TRUST_SELF_SIGNED = process.env.TRUST_SELF_SIGNED === 'true';
@@ -64,7 +66,21 @@ const createWindow = () => {
     },
   });
 
-  mainWindow.loadURL(APP_URL);
+  // 1) APP_URL override (외부 Next.js 등) 가 있으면 그것을 우선 사용
+  // 2) 개발 모드: Vite plugin 이 주입한 dev server URL
+  // 3) 운영 모드: 빌드된 index.html 파일을 로드
+  if (APP_URL_OVERRIDE) {
+    mainWindow.loadURL(APP_URL_OVERRIDE);
+  } else if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== 'undefined' && MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  } else if (typeof MAIN_WINDOW_VITE_NAME !== 'undefined' && MAIN_WINDOW_VITE_NAME) {
+    mainWindow.loadFile(
+      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+    );
+  } else {
+    // Fallback (구성이 누락된 경우)
+    mainWindow.loadURL('http://localhost:5173');
+  }
 
   if (process.env.NODE_ENV !== 'production') {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -84,9 +100,15 @@ const createWindow = () => {
 
   // 로드 실패 시 3초 뒤 자동 재시도 (서버 기동 타이밍 대응)
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    // -3 (ABORTED) 는 정상적인 네비게이션 인터럽트 (devtools 등) — 재시도하지 않음
+    if (errorCode === -3) return;
     console.error(`[Electron] 페이지 로드 실패: ${validatedURL} — ${errorCode} ${errorDescription}`);
     setTimeout(() => {
-      if (!mainWindow.isDestroyed()) mainWindow.loadURL(APP_URL);
+      if (mainWindow.isDestroyed()) return;
+      const retryUrl =
+        APP_URL_OVERRIDE ??
+        (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== 'undefined' ? MAIN_WINDOW_VITE_DEV_SERVER_URL : undefined);
+      if (retryUrl) mainWindow.loadURL(retryUrl);
     }, 3000);
   });
 };
@@ -140,7 +162,6 @@ ipcMain.handle('read-file', async (_event, filePath: string) => {
   }
 });
 
-<<<<<<< Updated upstream
 /** 바이너리 파일을 Base64로 읽기 (PDF, 이미지 등) */
 ipcMain.handle('read-file-base64', async (_event, filePath: string) => {
   try {
@@ -154,20 +175,6 @@ ipcMain.handle('read-file-base64', async (_event, filePath: string) => {
 /** Electron 앱 버전 */
 ipcMain.handle('get-app-version', () => app.getVersion());
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function guessMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  const map: Record<string, string> = {
-    '.pdf': 'application/pdf', '.png': 'image/png',
-    '.jpg': 'image/jpeg',     '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',      '.webp': 'image/webp',
-    '.svg': 'image/svg+xml',  '.txt': 'text/plain',
-    '.md': 'text/markdown',   '.json': 'application/json',
-    '.csv': 'text/csv',
-  };
-  return map[ext] ?? 'application/octet-stream';
-}
-=======
 /** Resolve paths where debug NDJSON can be appended (cwd is unreliable when launching from GUI). */
 function getDebugSessionLogPaths(): string[] {
   const out: string[] = [];
@@ -210,4 +217,17 @@ ipcMain.handle('debug-session-log', (_event, line: string) => {
     }
   }
 });
->>>>>>> Stashed changes
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function guessMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const map: Record<string, string> = {
+    '.pdf': 'application/pdf', '.png': 'image/png',
+    '.jpg': 'image/jpeg',     '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',      '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',  '.txt': 'text/plain',
+    '.md': 'text/markdown',   '.json': 'application/json',
+    '.csv': 'text/csv',
+  };
+  return map[ext] ?? 'application/octet-stream';
+}
