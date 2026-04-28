@@ -72,11 +72,11 @@ export async function fetchRolePermissions(): Promise<RolePermissionsResponse> {
 }
 
 /**
- * GET /api/management/role/get?userId=
+ * GET /api/role/get?userId=
  * Returns the user's permission tags. Requires GLOBAL_ROLE_VIEW tag for other users.
  */
 export async function fetchUserPermissionTags(userId: string): Promise<RoleGetResponse> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/get?userId=${encodeURIComponent(userId)}`);
+  const res = await fetchWithAuth(`${API_BASE}/api/role/get?userId=${encodeURIComponent(userId)}`);
   if (res.status === 403) throw new Error('접근 권한이 없습니다.');
   if (res.status === 404) throw new NotFoundError(`${userId} 의 역할 정보가 없습니다.`);
   if (!res.ok) throw new Error(`권한 조회 실패 (${res.status})`);
@@ -84,11 +84,11 @@ export async function fetchUserPermissionTags(userId: string): Promise<RoleGetRe
 }
 
 /**
- * POST /api/management/role/assign
+ * POST /api/role/assign
  * Assigns a role to a user. Requires GLOBAL_ROLE_ASSIGN + ADMIN + manageableBy.
  */
 export async function assignRole(userId: string, roleId: string): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/assign`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/role/assign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, roleId }),
@@ -98,11 +98,11 @@ export async function assignRole(userId: string, roleId: string): Promise<void> 
 }
 
 /**
- * DELETE /api/management/role/revoke
+ * DELETE /api/role/revoke
  * Revokes a role from a user. Requires GLOBAL_ROLE_REVOKE + ADMIN + manageableBy.
  */
 export async function revokeRole(userId: string, roleId: string): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/revoke`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/role/revoke`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, roleId }),
@@ -113,30 +113,30 @@ export async function revokeRole(userId: string, roleId: string): Promise<void> 
 }
 
 /**
- * GET /api/management/role/define
+ * GET /api/role/define
  * Lists all role definitions.
  */
 export async function fetchRoleDefinitions(): Promise<RoleDefinitionDto[]> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define`);
+  const res = await fetchWithAuth(`${API_BASE}/api/role/define`);
   if (!res.ok) throw new Error(`역할 정의 목록 조회 실패 (${res.status})`);
   return res.json();
 }
 
 /**
- * POST /api/management/role/reload
+ * POST /api/role/reload
  */
 export async function reloadUserPermissionCache(userId: string): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/reload?userId=${encodeURIComponent(userId)}`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/role/reload?userId=${encodeURIComponent(userId)}`, {
     method: 'POST'
   });
   if (!res.ok) throw new Error(`캐시 새로고침 실패 (${res.status})`);
 }
 
 /**
- * POST /api/management/role/reload/all
+ * POST /api/role/reload/all
  */
 export async function reloadAllPermissionCache(): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/reload/all`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/role/reload/all`, {
     method: 'POST'
   });
   if (!res.ok) throw new Error(`전체 캐시 새로고침 실패 (${res.status})`);
@@ -145,21 +145,21 @@ export async function reloadAllPermissionCache(): Promise<void> {
 // ── Permission Tags ──────────────────────────────────────────────────────
 
 /**
- * GET /api/management/role/tags
+ * GET /api/role/tags
  * Returns all permission tag definitions for role editing UI.
  */
 export async function fetchPermissionTags(): Promise<PermissionTagDto[]> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/tags`);
+  const res = await fetchWithAuth(`${API_BASE}/api/role/tags`);
   if (!res.ok) throw new Error(`권한 태그 목록 조회 실패 (${res.status})`);
   return res.json();
 }
 
 /**
- * GET /api/management/role/define/{roleId}
+ * GET /api/role/define/{roleId}
  * Returns a single role definition with full details (permissionTagIds, manageableByRoleIds).
  */
 export async function fetchRoleDefinition(roleId: string): Promise<RoleDefinitionDto> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define/${encodeURIComponent(roleId)}`);
+  const res = await fetchWithAuth(`${API_BASE}/api/role/define/${encodeURIComponent(roleId)}`);
   if (res.status === 404) throw new NotFoundError(`역할 정의 없음: ${roleId}`);
   if (!res.ok) throw new Error(`역할 정의 조회 실패 (${res.status})`);
   return res.json();
@@ -180,7 +180,7 @@ export interface RoleDefinitionRequest {
 }
 
 export async function createRoleDefinition(req: RoleDefinitionRequest): Promise<RoleDefinitionDto> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/role/define`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -192,7 +192,7 @@ export async function createRoleDefinition(req: RoleDefinitionRequest): Promise<
 }
 
 export async function updateRoleDefinition(roleId: string, req: RoleDefinitionRequest): Promise<RoleDefinitionDto> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define/${encodeURIComponent(roleId)}`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/role/define/${encodeURIComponent(roleId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -204,7 +204,7 @@ export async function updateRoleDefinition(roleId: string, req: RoleDefinitionRe
 }
 
 export async function deleteRoleDefinition(roleId: string): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define/${encodeURIComponent(roleId)}`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/role/define/${encodeURIComponent(roleId)}`, {
     method: 'DELETE',
   });
   if (res.status === 403) throw new Error('접근 권한이 없습니다.');
@@ -218,14 +218,14 @@ export interface TeamMemberInfo {
 }
 
 export async function fetchTeamMembers(teamId: string): Promise<TeamMemberInfo[]> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/team/${encodeURIComponent(teamId)}/members`);
+  const res = await fetchWithAuth(`${API_BASE}/api/role/team/${encodeURIComponent(teamId)}/members`);
   if (res.status === 403) throw new Error('접근 권한이 없습니다.');
   if (!res.ok) throw new Error(`팀 구성원 조회 실패 (${res.status})`);
   return res.json();
 }
 
 export async function reorderRoles(teamId: string, orderedRoleIds: string[]): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/define/reorder?teamId=${encodeURIComponent(teamId)}`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/role/define/reorder?teamId=${encodeURIComponent(teamId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(orderedRoleIds),
@@ -253,13 +253,13 @@ export interface TeamRequest {
 }
 
 export async function fetchTeams(): Promise<TeamDto[]> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/team`);
+  const res = await fetchWithAuth(`${API_BASE}/api/team`);
   if (!res.ok) throw new Error(`팀 목록 조회 실패 (${res.status})`);
   return res.json();
 }
 
 export async function createTeam(req: TeamRequest): Promise<TeamDto> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/team`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/team`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -271,7 +271,7 @@ export async function createTeam(req: TeamRequest): Promise<TeamDto> {
 }
 
 export async function updateTeam(teamId: string, req: TeamRequest): Promise<TeamDto> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/team/${encodeURIComponent(teamId)}`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/team/${encodeURIComponent(teamId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
@@ -283,7 +283,7 @@ export async function updateTeam(teamId: string, req: TeamRequest): Promise<Team
 }
 
 export async function deleteTeam(teamId: string): Promise<void> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/team/${encodeURIComponent(teamId)}`, {
+  const res = await fetchWithAuth(`${API_BASE}/api/team/${encodeURIComponent(teamId)}`, {
     method: 'DELETE',
   });
   if (res.status === 403) throw new Error('접근 권한이 없습니다.');
