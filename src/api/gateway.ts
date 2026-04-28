@@ -11,7 +11,7 @@ export interface AllowedApi {
 }
 
 /**
- * GET /api/management/role/profile response (v2)
+ * GET /api/role/profile response (v2)
  *
  * Role Server returns the user's assigned roles, computed permission tags,
  * enabled feature keys, and allowed API list.
@@ -66,7 +66,7 @@ export interface RoleDefinitionDto {
 // ── API ────────────────────────────────────────────────────────────────────────
 
 export async function fetchRolePermissions(): Promise<RolePermissionsResponse> {
-  const res = await fetchWithAuth(`${API_BASE}/api/management/role/profile`);
+  const res = await fetchWithAuth(`${API_BASE}/api/role/profile`);
   if (!res.ok) throw new Error(`권한 조회 실패 (${res.status})`);
   return res.json();
 }

@@ -22,7 +22,7 @@ export interface PermissionState {
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
 /**
- * Fetches permission info from GET /api/management/role/profile after login.
+ * Fetches permission info from GET /api/role/profile after login.
  * Call reload() to refetch immediately.
  */
 export function usePermissions(isLoggedIn: boolean): PermissionState {
