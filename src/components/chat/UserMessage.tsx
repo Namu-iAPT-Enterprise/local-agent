@@ -1,12 +1,10 @@
 import { FileText } from 'lucide-react';
 import ChatMarkdown from '../ChatMarkdown';
 import { stripFileBlocksForEdit, type UserAttachmentDisplay } from '../../hooks/useChat';
-import { detectCodeLanguage } from './detectCodeLanguage';
 
 export function UserMessage({ content, attachments }: { content: string; attachments?: UserAttachmentDisplay[] }) {
   const displayText = stripFileBlocksForEdit(content);
   const hasFences = /```/.test(displayText);
-  const detectedLang = !hasFences ? detectCodeLanguage(displayText) : null;
 
   const attachmentRow =
     attachments && attachments.length > 0 ? (
@@ -32,14 +30,13 @@ export function UserMessage({ content, attachments }: { content: string; attachm
       </div>
     ) : null;
 
-  if (hasFences || detectedLang) {
-    const mdContent = hasFences ? displayText : `\`\`\`${detectedLang}\n${displayText}\n\`\`\``;
+  if (hasFences) {
     return (
       <div className="flex flex-col items-end max-w-[88%] sm:max-w-[80%]">
         {attachmentRow}
         <div className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-br-sm overflow-hidden">
           <div className="px-4 py-3">
-            <ChatMarkdown content={mdContent} />
+            <ChatMarkdown content={displayText} />
           </div>
         </div>
       </div>

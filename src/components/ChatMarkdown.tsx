@@ -181,6 +181,7 @@ export default function ChatMarkdown({ content, streaming = false }: Props) {
     >
       <MarkdownRenderErrorBoundary rawFallback={safeContent}>
         <Streamdown
+          key={streaming ? 'streamdown-streaming' : 'streamdown-static'}
           className="w-full"
           components={markdownComponents}
           mode={streaming ? 'streaming' : 'static'}

@@ -119,6 +119,20 @@ export async function* streamChatSession(
   const decoder = new TextDecoder();
   let buffer = '';
   let eventType: StreamEventType = 'message';
+  let dataLines: string[] = [];
+
+  const flushEvent = function* (): Generator<StreamEvent> {
+    if (dataLines.length === 0) {
+      eventType = 'message';
+      return;
+    }
+
+    const data = dataLines.join('\n');
+    dataLines = [];
+    const emittedType = eventType;
+    eventType = 'message';
+    yield { type: emittedType, data };
+  };
 
   try {
     while (true) {
@@ -135,15 +149,26 @@ export async function* streamChatSession(
         } else if (line.startsWith('event:')) {
           eventType = line.slice(6).trim() as StreamEventType;
         } else if (line.startsWith('data:')) {
-          // Preserve leading space — space-prefixed tokens are intentional
-          const data = line.slice(5);
-          yield { type: eventType, data };
-          if (eventType === 'done' || eventType === 'error') return;
+          // Preserve the payload bytes exactly as the backend streamed them.
+          //
+          // Native EventSource strips one optional leading space after `data:`, but this
+          // chat stream carries token deltas where a leading space is often meaningful
+          // (e.g. `" Fruit"`, `" **bold**"`). Trimming here caused live renders to lose
+          // spaces, which then broke headings, bold markers, and paragraph flow until a
+          // full history reload rehydrated the exact stored text.
+          dataLines.push(line.slice(5));
         } else if (line === '') {
-          // End of SSE event block — reset type for next event
-          eventType = 'message';
+          for (const event of flushEvent()) {
+            yield event;
+            if (event.type === 'done' || event.type === 'error') return;
+          }
         }
       }
+    }
+
+    for (const event of flushEvent()) {
+      yield event;
+      if (event.type === 'done' || event.type === 'error') return;
     }
   } finally {
     reader.cancel();

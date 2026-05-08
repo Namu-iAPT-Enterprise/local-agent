@@ -178,6 +178,44 @@ export interface Message {
   skillType?: 'docx' | 'pptx' | 'xlsx' | 'pdf' | 'hwpx';
 }
 
+function coalesceHistory(history: HistoryMessage[]): HistoryMessage[] {
+  const normalized: HistoryMessage[] = [];
+
+  for (const msg of history) {
+    const last = normalized[normalized.length - 1];
+    if (
+      last
+      && last.role === msg.role
+      && last.content === msg.content
+      && (last.thinking ?? '') === (msg.thinking ?? '')
+    ) {
+      continue;
+    }
+
+    normalized.push(msg);
+
+    const len = normalized.length;
+    if (len < 4) continue;
+
+    const prevUser = normalized[len - 4];
+    const prevAssistant = normalized[len - 3];
+    const nextUser = normalized[len - 2];
+    const nextAssistant = normalized[len - 1];
+
+    if (
+      prevUser?.role === 'user'
+      && prevAssistant?.role === 'assistant'
+      && nextUser?.role === 'user'
+      && nextAssistant?.role === 'assistant'
+      && prevUser.content === nextUser.content
+    ) {
+      normalized.splice(len - 4, 2);
+    }
+  }
+
+  return normalized;
+}
+
 const MAX_VISION_IMAGES = 6;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // raw file limit before compression
 const MAX_TEXT_FILE_BYTES = 400 * 1024;
@@ -802,7 +840,7 @@ export function useChat() {
   ): Promise<ModelOption | null> => {
     if (isStreaming) return null;
     try {
-      const history = await getChatHistory(sid);
+      const history = coalesceHistory(await getChatHistory(sid));
       const msgs: Message[] = history.map((m) => ({
         role: m.role,
         content: m.content,

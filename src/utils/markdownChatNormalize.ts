@@ -3,6 +3,7 @@
  * so remark/GFM can parse; mirrors export rules where possible (see llmMarkdownNormalize).
  */
 import { normalizeLlmMarkdownChunkLikeExport } from './llmMarkdownNormalize';
+import { fixGfmTableGlue } from './markdownTableNormalize';
 
 const FENCE_LANG_ALIASES = [
   'typescript', 'javascript', 'python3', 'python', 'markdown', 'plaintext', 'bash',
@@ -260,6 +261,41 @@ function fixLlmMarkdownTablesAndStructure(text: string): string {
   return applyOutsideCodeFences(text, normalizeLlmMarkdownChunkLikeExport);
 }
 
+function countTableColumns(row: string): number {
+  const t = row.trim();
+  const inner = t.replace(/^\|/, '').replace(/\|\s*$/, '');
+  if (!inner.trim()) return 0;
+  return inner.split('|').length;
+}
+
+function padIncompleteStreamingTables(text: string): string {
+  return applyOutsideCodeFences(text, (chunk) => {
+    const lines = chunk.split('\n');
+    if (lines.length === 0) return chunk;
+
+    const lastIdx = lines.length - 1;
+    const last = lines[lastIdx];
+    if (last && /^\s*\|/.test(last) && last.includes('|') && !last.trimEnd().endsWith('|')) {
+      lines[lastIdx] = `${last.trimEnd()} |`;
+    }
+
+    let out = lines.join('\n');
+    const rowLines = out.split('\n');
+    if (rowLines.length === 1) {
+      const row = rowLines[0]!.trim();
+      if (/^\|[^|\n]+\|[^|\n]+\|/.test(row) && !/^\s*\|[\s\-:]+\|/.test(row)) {
+        const cols = countTableColumns(rowLines[0]!);
+        if (cols >= 2) {
+          const sep = `|${Array(cols).fill(' --- ').join('|')}|`;
+          out = `${out}\n${sep}`;
+        }
+      }
+    }
+
+    return out;
+  });
+}
+
 function ensureNewlineAfterBoldBeforeBulletBoldLine(text: string): string {
   return text.replace(/(\*\*[^*]+\*\*)(\s*)(\*\s+\*\*[^\n]+)/g, '$1\n\n$3');
 }
@@ -281,16 +317,20 @@ function fixChatMarkdownLayout(text: string): string {
 
 /**
  * Streaming-safe normalizer:
- * apply only lightweight, low-risk transforms while tokens are still arriving.
- * Avoid aggressive unfenced-code inference during stream to reduce jitter.
+ * preserve the model output as closely as possible while tokens are still arriving.
+ *
+ * Heavy structural regexes are intentionally avoided here. They help with static
+ * cleanup after the stream finishes, but on partial token streams they can destroy
+ * meaningful spaces and punctuation around headings / emphasis markers, which makes
+ * live rendering look broken until a full refresh.
  */
 export function normalizeMarkdownForChatStreaming(raw: string): string {
   let result = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   if (!result.trim()) return result;
-  result = applyOutsideCodeFences(result, fixModelBlockSeparators);
-  result = fixFencedCodeGlitches(result);
+  result = applyOutsideCodeFences(result, fixGfmTableGlue);
+  result = padIncompleteStreamingTables(result);
   result = fixLlmMarkdownTablesAndStructure(result);
-  result = fixChatMarkdownLayout(result);
+  result = fixFencedCodeGlitches(result);
   result = ensureClosedFence(result);
   return result;
 }
@@ -299,11 +339,16 @@ export function normalizeMarkdownForChatStreaming(raw: string): string {
 export function normalizeMarkdownForChat(raw: string): string {
   let result = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   if (!result.trim()) return result;
-  result = applyOutsideCodeFences(result, fixModelBlockSeparators);
+  // Keep the static chat renderer close to the streamed representation.
+  // The more aggressive paragraph / heading / bullet rewrites below were useful when
+  // the old stream parser was collapsing whitespace, but after fixing token assembly
+  // they now over-correct completed tables and can turn valid rows into list items.
+  //
+  // Export pipelines still have their own heavier normalization; the in-chat renderer
+  // should optimize for fidelity to the model output.
+  result = applyOutsideCodeFences(result, fixGfmTableGlue);
   result = fixFencedCodeGlitches(result);
-  result = fixUnfencedCode(result);
   result = fixLlmMarkdownTablesAndStructure(result);
-  result = fixChatMarkdownLayout(result);
   result = ensureClosedFence(result);
   return result;
 }
