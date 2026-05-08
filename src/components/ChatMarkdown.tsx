@@ -1,7 +1,6 @@
 import React, { Component, useEffect, useMemo } from 'react';
-import { Streamdown } from 'streamdown';
-import { code as streamdownCode } from '@streamdown/code';
-import type { Components } from 'streamdown';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { normalizeMarkdownForChat, normalizeMarkdownForChatStreaming } from '../utils/markdownChatNormalize';
 import { debugSessionLog } from '../utils/debugSessionLog';
 
@@ -59,7 +58,7 @@ interface Props {
 const linkClass =
   'text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300';
 
-const markdownComponents: Components = {
+const markdownComponents = {
   h1: ({ children }) => (
     <h1 className="mt-5 mb-2 text-[1.95rem] font-semibold tracking-tight text-gray-950 first:mt-0 dark:text-white">
       {children}
@@ -143,7 +142,29 @@ const markdownComponents: Components = {
       {children}
     </code>
   ),
-};
+  code: ({ inline, className, children, ...props }: { inline?: boolean; className?: string; children?: React.ReactNode }) => {
+    if (inline) {
+      return markdownComponents.inlineCode({ children, ...props });
+    }
+
+    const lang = className?.match(/language-([\w#+-]+)/)?.[1] ?? '';
+
+    return (
+      <div className="my-4 overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950/40">
+        {lang ? (
+          <div className="border-b border-gray-200 px-4 py-2 text-[11px] font-semibold tracking-[0.08em] text-gray-500 uppercase dark:border-gray-800 dark:text-gray-400">
+            {lang}
+          </div>
+        ) : null}
+        <pre className="overflow-x-auto px-4 py-3 text-[13px] leading-6 text-gray-800 dark:text-gray-100">
+          <code className={className} {...props}>
+            {children}
+          </code>
+        </pre>
+      </div>
+    );
+  },
+} as const;
 
 export default function ChatMarkdown({ content, streaming = false }: Props) {
   const safeContent = typeof content === 'string' ? content : String(content ?? '');
@@ -180,19 +201,12 @@ export default function ChatMarkdown({ content, streaming = false }: Props) {
       style={{ contain: 'layout style' }}
     >
       <MarkdownRenderErrorBoundary rawFallback={safeContent}>
-        <Streamdown
-          key={streaming ? 'streamdown-streaming' : 'streamdown-static'}
-          className="w-full"
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
           components={markdownComponents}
-          mode={streaming ? 'streaming' : 'static'}
-          parseIncompleteMarkdown
-          isAnimating={streaming}
-          animated={false}
-          shikiTheme={['github-light', 'github-dark']}
-          plugins={{ code: streamdownCode }}
         >
           {md}
-        </Streamdown>
+        </ReactMarkdown>
       </MarkdownRenderErrorBoundary>
     </div>
   );

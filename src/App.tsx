@@ -214,7 +214,18 @@ export default function App() {
   // accountRole 조회 제거 — 모든 UI 접근 제어는 RoleServer 권한 태그 기반
 
   const prevStreaming = useRef(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [autoFollowStream, setAutoFollowStream] = useState(true);
+
+  const isNearBottom = useCallback((el: HTMLDivElement) => {
+    const threshold = 48;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+  }, []);
+
   useEffect(() => {
+    if (!prevStreaming.current && isStreaming) {
+      setAutoFollowStream(true);
+    }
     if (prevStreaming.current && !isStreaming) {
       textareaRef.current?.focus();
       // Refresh the session list immediately when output finishes, then once more
@@ -226,6 +237,11 @@ export default function App() {
     }
     prevStreaming.current = isStreaming;
   }, [isStreaming]);
+
+  useEffect(() => {
+    if (!isStreaming || !autoFollowStream) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isStreaming, autoFollowStream]);
 
   const handleLogin = (userId: string) => {
     void userId;
@@ -246,6 +262,7 @@ export default function App() {
       platform: session.platform,
     });
     if (restoredModel) setSelectedModel(restoredModel);
+    setAutoFollowStream(true);
     setMobileMenuOpen(false);
   };
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -321,15 +338,12 @@ export default function App() {
     });
   };
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
   const handleSend = () => {
     const text = input.trim();
     if (pendingAttachments.some((a) => a.status === 'loading')) return;
     if ((!text && pendingAttachments.length === 0) || isStreaming) return;
     setInput('');
+    setAutoFollowStream(true);
 
     send(
       text,
@@ -510,7 +524,15 @@ export default function App() {
           {hasMessages ? (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full max-w-2xl xl:max-w-3xl mx-auto px-3 sm:px-6">
-                <div className="hide-scrollbar flex-1 min-h-0 overflow-y-auto pt-4 sm:pt-6 pb-2 space-y-4 sm:space-y-6">
+                <div
+                  ref={chatScrollRef}
+                  onScroll={() => {
+                    const el = chatScrollRef.current;
+                    if (!el) return;
+                    setAutoFollowStream(isNearBottom(el));
+                  }}
+                  className="hide-scrollbar flex-1 min-h-0 overflow-y-auto pt-4 sm:pt-6 pb-2 space-y-4 sm:space-y-6"
+                >
                   <ChatMessageList
                     messages={messages}
                     isStreaming={isStreaming}

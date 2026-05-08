@@ -200,6 +200,151 @@ function fixGluedFenceOpen(text: string): string {
   return text.replace(re, (_match, lang: string) => '```' + lang.toLowerCase() + '\n');
 }
 
+function splitGluedFenceCloseBeforeMarkdown(text: string): string {
+  return text.replace(
+    /```(?=(#{1,6}\s|[-*+]\s|\d+\.\s|\||```[A-Za-z0-9#+_-]*))/g,
+    '```\n',
+  );
+}
+
+function splitSequentialFences(text: string): string {
+  return text.replace(
+    /``````([A-Za-z0-9#+_-]+)/g,
+    '```\n```$1',
+  );
+}
+
+function recoverFenceLanguageContinuationLines(text: string): string {
+  const lines = text.split('\n');
+  const out: string[] = [];
+
+  const looksCodeLike = (line: string | undefined): boolean => {
+    if (!line) return false;
+    const t = line.trim();
+    if (!t) return false;
+    return /[(){}[\]:;=]/.test(t) || /^(?:def|class|function|const|let|var|import|from|public|private|print)\b/.test(t);
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    const fenceMatch = line.match(/^(\s*```)([A-Za-z0-9#+_-]+)\s*$/);
+    if (!fenceMatch) {
+      out.push(line);
+      continue;
+    }
+
+    const prefix = fenceMatch[1]!;
+    const lang = fenceMatch[2]!.toLowerCase();
+    const continuation = lines[i + 1]?.trim().toLowerCase() ?? '';
+    const merged = `${lang}${continuation}`;
+    const nextAfterContinuation = lines[i + 2];
+
+    if (
+      continuation &&
+      /^[a-z0-9#+_-]+$/.test(continuation) &&
+      continuation.length <= 8 &&
+      lang.length < merged.length &&
+      FENCE_LANG_ALIASES.includes(merged) &&
+      looksCodeLike(nextAfterContinuation)
+    ) {
+      out.push(`${prefix}${merged}`);
+      i += 1;
+      continue;
+    }
+
+    out.push(line);
+  }
+
+  return out.join('\n');
+}
+
+function stripTrailingEmptyFence(text: string): string {
+  // While streaming, models sometimes emit a bare fence opener at the tail before
+  // any language/content arrives. Rendering that immediately creates a phantom empty
+  // code block with a blinking cursor below it. Hide only the trailing incomplete
+  // fence; once content arrives it will render normally on the next chunk.
+  return text.replace(/\n?```[A-Za-z0-9#+_-]*\s*$/g, '');
+}
+
+function removeEmptyFencedCodeBlocks(text: string): string {
+  return text.replace(/(?:^|\n)```[A-Za-z0-9#+_-]*\s*\n(?:\s*\n)*```(?=\n|$)/g, '\n');
+}
+
+function removeMalformedTinyFencedCodeBlocks(text: string): string {
+  return text.replace(
+    /(?:^|\n)```[A-Za-z0-9#+_-]*\s*\n([ \t]*(?:\d+\.?|\*|-|\+|=+|_+|~+)?[ \t]*)\n```(?=\n|$)/g,
+    (_full, inner: string) => {
+      const t = inner.trim();
+      if (!t) return '\n';
+      if (/^(?:\d+\.?|\*|-|\+|=+|_+|~+)$/.test(t)) return '\n';
+      return _full;
+    },
+  );
+}
+
+function normalizeStandaloneEqualsRule(text: string): string {
+  return text.replace(/^\s*={3,}\s*$/gm, '---');
+}
+
+function recoverUnclosedNonMarkdownFences(text: string): string {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let openFenceLang: string | null = null;
+  let linesInsideFence = 0;
+
+  const isMarkdownLikeLine = (line: string): boolean => {
+    const t = line.trim();
+    if (!t) return false;
+    if (/^#{1,6}\s/.test(t)) return true;
+    if (/^[-*+]\s/.test(t)) return true;
+    if (/^\d+\.\s/.test(t)) return true;
+    if (/^\|.*\|$/.test(t)) return true;
+    if (/^\[\^.+\]:/.test(t)) return true;
+    if (/^(?:---|\*\*\*|___)\s*$/.test(t)) return true;
+    if (/^\*\*[^*]+\*\*:/.test(t)) return true;
+    return false;
+  };
+
+  const isFenceLangMarkdownish = (lang: string | null): boolean => {
+    if (!lang) return false;
+    const l = lang.toLowerCase();
+    return l === 'md' || l === 'markdown' || l === 'mdx' || l === 'text' || l === 'plaintext' || l === 'txt';
+  };
+
+  for (const line of lines) {
+    const fenceMatch = line.match(/^\s*```([A-Za-z0-9#+_-]*)?\s*$/);
+    if (fenceMatch) {
+      out.push(line);
+      if (openFenceLang === null) {
+        openFenceLang = (fenceMatch[1] ?? '').trim() || null;
+        linesInsideFence = 0;
+      } else {
+        openFenceLang = null;
+        linesInsideFence = 0;
+      }
+      continue;
+    }
+
+    if (
+      openFenceLang !== null &&
+      !isFenceLangMarkdownish(openFenceLang) &&
+      linesInsideFence >= 2 &&
+      isMarkdownLikeLine(line)
+    ) {
+      out.push('```');
+      openFenceLang = null;
+      linesInsideFence = 0;
+    }
+
+    out.push(line);
+    if (openFenceLang !== null && line.trim()) {
+      linesInsideFence += 1;
+    }
+  }
+
+  return out.join('\n');
+}
+
 function ensureClosedFence(text: string): string {
   const ticks = text.match(/```/g);
   const n = ticks?.length ?? 0;
@@ -213,6 +358,10 @@ function fixFencedCodeGlitches(text: string): string {
   let s = fixFenceLanguageSpacesOnLine(text);
   s = fixFenceLanguageSplitAcrossLines(s);
   s = fixGluedFenceOpen(s);
+  s = splitGluedFenceCloseBeforeMarkdown(s);
+  s = splitSequentialFences(s);
+  s = recoverFenceLanguageContinuationLines(s);
+  s = recoverUnclosedNonMarkdownFences(s);
   s = ensureClosedFence(s);
   return s;
 }
@@ -331,24 +480,19 @@ export function normalizeMarkdownForChatStreaming(raw: string): string {
   result = padIncompleteStreamingTables(result);
   result = fixLlmMarkdownTablesAndStructure(result);
   result = fixFencedCodeGlitches(result);
+  result = stripTrailingEmptyFence(result);
+  result = removeEmptyFencedCodeBlocks(result);
+  result = removeMalformedTinyFencedCodeBlocks(result);
+  result = normalizeStandaloneEqualsRule(result);
   result = ensureClosedFence(result);
   return result;
 }
 
 /** Preprocess raw assistant markdown so GFM can parse tables, headings, and fences. */
 export function normalizeMarkdownForChat(raw: string): string {
-  let result = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  if (!result.trim()) return result;
-  // Keep the static chat renderer close to the streamed representation.
-  // The more aggressive paragraph / heading / bullet rewrites below were useful when
-  // the old stream parser was collapsing whitespace, but after fixing token assembly
-  // they now over-correct completed tables and can turn valid rows into list items.
-  //
-  // Export pipelines still have their own heavier normalization; the in-chat renderer
-  // should optimize for fidelity to the model output.
-  result = applyOutsideCodeFences(result, fixGfmTableGlue);
-  result = fixFencedCodeGlitches(result);
-  result = fixLlmMarkdownTablesAndStructure(result);
-  result = ensureClosedFence(result);
-  return result;
+  // Final chat rendering should preserve the exact same block boundaries users saw
+  // while streaming. Divergence between the streaming and final normalizers caused
+  // completed responses to recombine fenced blocks after `done`, even when they were
+  // separated correctly during token streaming.
+  return normalizeMarkdownForChatStreaming(raw);
 }
