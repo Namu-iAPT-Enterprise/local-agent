@@ -403,12 +403,14 @@ function SectionAssign({ tags, allRoles, allTeams, myRoleIds = [] }: {
     return s;
   }, [allRoles, myRoleIds]);
 
-  const visibleRoles = useMemo(() =>
-    canViewGlobal
-      ? allRoles                                            // GLOBAL_ROLE_VIEW: 전체
-      : allRoles.filter(r => r.teamId && myTeamIds.has(r.teamId)), // ROLE_VIEW_OWN: 내 팀만
-    [allRoles, canViewGlobal, myTeamIds]
-  );
+  const visibleRoles = useMemo(() => {
+    // @All 가상 역할(__DEFAULT__ 팀 소속)은 모든 사용자에게 자동 합산되므로
+    // 명시 배정/회수 화면에는 노출하지 않는다 (OPA 단에서도 차단됨).
+    const base = canViewGlobal
+      ? allRoles                                              // GLOBAL_ROLE_VIEW: 전체
+      : allRoles.filter(r => r.teamId && myTeamIds.has(r.teamId)); // ROLE_VIEW_OWN: 내 팀만
+    return base.filter(r => !isDefaultTeam(r.teamId));
+  }, [allRoles, canViewGlobal, myTeamIds]);
 
   const rolesByTeam = useMemo(() => {
     const map = new Map<string, RoleDefinitionDto[]>();
@@ -566,16 +568,20 @@ function SectionMembers({ tags, allRoles, allTeams, myRoleIds = [] }: {
   }, [allRoles, myRoleIds]);
 
   // 선택 가능한 팀: GLOBAL_ROLE_VIEW 있으면 전체, 아니면 자기 팀만
+  // (단, @All 가상 팀(__DEFAULT__)은 명시 배정 영역이 아니므로 항상 제외)
   const selectableTeams = useMemo(() => {
-    if (can(tags, 'GLOBAL_ROLE_VIEW')) return allTeams;
-    return allTeams.filter(t => myTeamIds.has(t.teamId));
+    const base = can(tags, 'GLOBAL_ROLE_VIEW') ? allTeams : allTeams.filter(t => myTeamIds.has(t.teamId));
+    return base.filter(t => !isDefaultTeam(t.teamId));
   }, [allTeams, myTeamIds, tags]);
 
   // 해당 팀의 역할 (priority 순 정렬)
+  // @All 가상 팀이 어떤 경로로 selectedTeam 에 들어와도 노출되지 않도록 가드.
   const teamRoles = useMemo(() =>
-    allRoles
-      .filter(r => r.teamId === selectedTeam)
-      .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999)),
+    isDefaultTeam(selectedTeam)
+      ? []
+      : allRoles
+          .filter(r => r.teamId === selectedTeam)
+          .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999)),
     [allRoles, selectedTeam]
   );
 
@@ -822,6 +828,26 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
     return map;
   }, [allRoles]);
 
+  // 일반 팀 그룹과 @All 가상 팀 그룹을 분리.
+  // @All(__DEFAULT__) 그룹은 화면 맨 하단에 축소된 형태로 별도 표시한다.
+  const normalRolesByTeam = useMemo(() => {
+    const out: Array<[string, RoleDefinitionDto[]]> = [];
+    for (const entry of rolesByTeam.entries()) {
+      if (!isDefaultTeam(entry[0])) out.push(entry);
+    }
+    return out;
+  }, [rolesByTeam]);
+
+  const defaultTeamRoles = useMemo(
+    () => {
+      for (const [teamId, roles] of rolesByTeam.entries()) {
+        if (isDefaultTeam(teamId)) return { teamId, roles };
+      }
+      return null;
+    },
+    [rolesByTeam],
+  );
+
   // OPA Rego 정책(`role.rego`)을 미러링한 인가 컨텍스트.
   // define_modify_allow / define_delete_allow 동일 의미론으로 priorityLocked 판정.
   const policyCtx: PolicyContext = useMemo(
@@ -896,6 +922,19 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
 
   const handleCreate = async () => {
     if (!form.roleId.trim() || !form.displayName.trim() || !form.teamId) return;
+    // 시스템 예약 식별자(__로 감싼 ID, ORIGIN) 방어 — 서버/OPA 에서도 차단되지만 UX 차원에서 사전 안내
+    const reservedIds = ['__ALL__', '__DEFAULT__', 'ORIGIN'];
+    const trimmedId = form.roleId.trim();
+    if (reservedIds.includes(trimmedId) || (trimmedId.startsWith('__') && trimmedId.endsWith('__'))) {
+      setSaveSt('error');
+      setSaveMsg(`'${trimmedId}'는 시스템 예약 ID라 사용할 수 없습니다.`);
+      return;
+    }
+    if (isDefaultTeam(form.teamId)) {
+      setSaveSt('error');
+      setSaveMsg('@All 가상 팀에는 새 역할을 만들 수 없습니다.');
+      return;
+    }
     setSaveSt('loading'); setSaveMsg('');
     try {
       const createTags = stripGlobalTags(form.permissionTagIds, form.teamId);
@@ -972,7 +1011,9 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
             <label className="text-xs font-medium text-gray-600 dark:text-gray-400">소속 팀 *</label>
             <select value={form.teamId} onChange={e => setForm(f => ({ ...f, teamId: e.target.value }))} className={`${inputCls} mt-1`}>
               <option value="">팀 선택...</option>
-              {allTeams.map(t => <option key={t.teamId} value={t.teamId}>{t.displayName} ({t.teamId})</option>)}
+              {allTeams
+                .filter(t => !isDefaultTeam(t.teamId))   // @All 가상 팀은 새 역할 생성 대상이 될 수 없음
+                .map(t => <option key={t.teamId} value={t.teamId}>{t.displayName} ({t.teamId})</option>)}
             </select>
           </div>
         )}
@@ -1012,7 +1053,10 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
             역할 생성 시 생성자의 역할이 자동으로 추가됩니다.
           </p>
           <div className="max-h-[200px] overflow-y-auto space-y-1 rounded-lg border border-gray-200 dark:border-gray-700 p-2">
-            {allRoles.filter(r => r.roleId !== form.roleId).map(role => {
+            {allRoles
+              .filter(r => r.roleId !== form.roleId)
+              .filter(r => !isDefaultTeam(r.teamId))   // @All 가상 역할은 관리 위임 대상이 될 수 없음
+              .map(role => {
               const isSelected = form.manageableByRoleIds.has(role.roleId);
               return (
                 <div
@@ -1062,7 +1106,7 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
         </div>
       )}
 
-      {[...rolesByTeam.entries()].map(([teamId, roles]) => {
+      {normalRolesByTeam.map(([teamId, roles]) => {
         const team = teamMap.get(teamId);
         return (
           <div key={teamId} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -1143,6 +1187,62 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
         );
       })}
 
+      {/* @All 가상 역할(전역 기본 권한) — 일반 팀과 분리하여 화면 맨 하단에 작은 별도 섹션으로 표시.
+          역할 ID(__ALL__)와 팀 ID(__DEFAULT__) 같은 raw 식별자는 노출하지 않고 사용자 친화적
+          라벨/툴팁으로만 안내. role.system=true 이므로 삭제는 자동으로 차단되며, 편집(권한 태그
+          변경)은 정책상 가능. */}
+      {defaultTeamRoles && defaultTeamRoles.roles.length > 0 && (
+        <div className="mt-6 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700/60">
+          <div className="flex items-center gap-2 mb-2">
+            <Users size={11} className="text-violet-500 dark:text-violet-400" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+              전역 역할 (모든 사용자 자동 부여)
+            </span>
+          </div>
+          <div className="rounded-lg border border-violet-200/60 dark:border-violet-900/40 bg-violet-50/30 dark:bg-violet-900/10 overflow-hidden">
+            <div className="divide-y divide-violet-100/60 dark:divide-violet-900/30">
+              {defaultTeamRoles.roles.map(role => {
+                const canModifyThis = canModifyRole(policyCtx, role);
+                const lockReason = !canModifyThis
+                  ? '@All 권한을 수정하려면 글로벌 권한 관리자(GLOBAL_ROLE_MANAGE)가 필요합니다'
+                  : '';
+                return (
+                  <React.Fragment key={role.roleId}>
+                    <div className="px-3 py-2 flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 font-mono flex-shrink-0">
+                        <Users size={9} />@All
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] text-gray-600 dark:text-gray-300 truncate">
+                          {role.displayName} <span className="text-gray-400">— 모든 사용자에게 자동 부여되는 기본 권한</span>
+                        </p>
+                        {(role.permissionTagIds?.length ?? 0) > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {(role.permissionTagIds ?? []).slice(0, 6).map(t => (
+                              <span key={t} className="text-[9px] font-mono px-1 py-0.5 rounded bg-white/70 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 border border-violet-100 dark:border-violet-900/40">{t}</span>
+                            ))}
+                            {(role.permissionTagIds?.length ?? 0) > 6 && (
+                              <span className="text-[9px] text-gray-400">+{(role.permissionTagIds?.length ?? 0) - 6}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <ActionBtn
+                        onClick={() => startEdit(role)}
+                        disabled={!canModify || !canModifyThis}
+                        disabledReason={lockReason || 'GLOBAL_ROLE_MANAGE 권한 필요'}
+                        variant="ghost" icon={<Pencil size={11} />}
+                      >권한 편집</ActionBtn>
+                    </div>
+                    {editingId === role.roleId && renderForm('edit', role.roleId)}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {allRoles.length === 0 && <p className="px-5 py-8 text-sm text-center text-gray-400">역할 정의가 없습니다.</p>}
     </div>
   );
@@ -1174,9 +1274,17 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
 
   const handleCreate = async () => {
     if (!form.teamId.trim() || !form.displayName.trim()) return;
+    // 시스템 예약 팀 ID 방어
+    const trimmedId = form.teamId.trim();
+    const reservedTeamIds = ['GLOBAL', '__DEFAULT__'];
+    if (reservedTeamIds.includes(trimmedId) || (trimmedId.startsWith('__') && trimmedId.endsWith('__'))) {
+      setSaveSt('error');
+      setSaveMsg(`'${trimmedId}'는 시스템 예약 팀 ID라 사용할 수 없습니다.`);
+      return;
+    }
     setSaveSt('loading'); setSaveMsg('');
     try {
-      await createTeam({ teamId: form.teamId.trim(), displayName: form.displayName.trim(), color: form.color || undefined });
+      await createTeam({ teamId: trimmedId, displayName: form.displayName.trim(), color: form.color || undefined });
       setSaveSt('success'); setSaveMsg(`${form.teamId} 팀 생성 완료`);
       setCreating(false); resetForm(); onRefreshTeams();
     } catch (e: unknown) { setSaveSt('error'); setSaveMsg(e instanceof Error ? e.message : '실패'); }
@@ -1208,13 +1316,20 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
     return m;
   }, [allRoles]);
 
+  // __DEFAULT__ 팀은 @All 가상 역할 전용 시스템 예약 팀이므로 일반 팀 관리 목록에서 숨김.
+  // (역할 정의 화면에서만 작은 별도 섹션으로 노출됨)
+  const visibleTeams = useMemo(
+    () => allTeams.filter(t => !isDefaultTeam(t.teamId)),
+    [allTeams],
+  );
+
   if (!canView) return <SectionLocked tag="TEAM_VIEW_ANY" />;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-          팀 ({allTeams.length}개)
+          팀 ({visibleTeams.length}개)
         </p>
         <ActionBtn onClick={() => { setCreating(v => !v); setEditingId(null); resetForm(); setSaveSt('idle'); }} disabled={!canCreate} disabledReason="TEAM_CREATE 권한 필요" variant="primary" icon={creating ? <X size={13} /> : <Plus size={13} />}>
           {creating ? '취소' : '새 팀 만들기'}
@@ -1249,11 +1364,9 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
       )}
 
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden divide-y divide-gray-100 dark:divide-gray-700/50">
-        {allTeams.length === 0 && <p className="px-5 py-8 text-sm text-center text-gray-400">등록된 팀이 없습니다.</p>}
-        {allTeams.map(team => {
+        {visibleTeams.length === 0 && <p className="px-5 py-8 text-sm text-center text-gray-400">등록된 팀이 없습니다.</p>}
+        {visibleTeams.map(team => {
           const isGlobal = team.teamId === 'GLOBAL';
-          const isDefault = isDefaultTeam(team.teamId);   // ALL 가상 역할 전용 팀
-          const isVirtual = isGlobal || isDefault;        // 시스템 예약 팀(편집/삭제 제한 대상)
           const roleCount = roleCountMap.get(team.teamId) ?? 0;
           return (
             <React.Fragment key={team.teamId}>
@@ -1267,32 +1380,21 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
                         <Globe size={8} />시스템
                       </span>
                     )}
-                    {isDefault && (
-                      <span className="text-[9px] font-bold text-violet-600 dark:text-violet-300 px-1 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 flex items-center gap-0.5">
-                        <Users size={8} />@All · 기본 권한
-                      </span>
-                    )}
                     <span className="text-[9px] text-gray-400">{roleCount}개 역할</span>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {isDefault ? '모든 사용자에게 자동으로 부여되는 가상 팀 (ALL 역할 전용)' : team.displayName}
-                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{team.displayName}</p>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <ActionBtn
                     onClick={() => { setEditingId(editingId === team.teamId ? null : team.teamId); setForm({ teamId: team.teamId, displayName: team.displayName, color: team.color ?? '' }); setSaveSt('idle'); setCreating(false); }}
-                    disabled={!canManage || isDefault}
-                    disabledReason={isDefault ? '@All 팀은 시스템 예약 팀이라 편집할 수 없습니다' : 'TEAM_MANAGE 권한 필요'}
+                    disabled={!canManage}
+                    disabledReason="TEAM_MANAGE 권한 필요"
                     variant="ghost" icon={<Pencil size={12} />}
                   >편집</ActionBtn>
                   <ActionBtn
                     onClick={() => handleDelete(team.teamId)}
-                    disabled={!canDelete || isVirtual}
-                    disabledReason={
-                      isGlobal ? 'Global 팀은 삭제할 수 없습니다' :
-                      isDefault ? '@All 팀은 시스템 예약 팀이라 삭제할 수 없습니다' :
-                      'TEAM_DELETE 권한 필요'
-                    }
+                    disabled={!canDelete || isGlobal}
+                    disabledReason={isGlobal ? 'Global 팀은 삭제할 수 없습니다' : 'TEAM_DELETE 권한 필요'}
                     loading={deleteSt[team.teamId] === 'loading'}
                     variant="danger" icon={<Trash2 size={12} />}
                   >삭제</ActionBtn>

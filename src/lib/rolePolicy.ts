@@ -196,12 +196,12 @@ export function isOwnTopRole(ctx: PolicyContext, targetRoleId: string): boolean 
  *   케이스 2: 팀 스코프 ROLE_MANAGE_OWN → effective_priority < target.priority
  */
 export function canModifyRole(ctx: PolicyContext, target: RoleDefinitionDto): boolean {
-  // 케이스 1: GLOBAL
+  // 케이스 1: GLOBAL — GLOBAL_ROLE_MANAGE 보유자는 시스템 역할(@All 포함)도 권한 편집 가능
   if (hasGlobalTag(ctx, 'GLOBAL_ROLE_MANAGE')) {
     return !isOwnTopRole(ctx, target.roleId);
   }
-  // 케이스 2: 팀 스코프
-  if (!target.teamId || isGlobalTeam(target.teamId)) return false;
+  // 케이스 2: 팀 스코프 — GLOBAL/__DEFAULT__ 가상 팀 역할은 팀 권한자에게도 절대 편집 불가
+  if (!target.teamId || isGlobalTeam(target.teamId) || isDefaultTeam(target.teamId)) return false;
   const ep = effectivePriority(ctx, target.teamId, 'ROLE_MANAGE_OWN');
   return ep !== null && ep < target.priority;
 }
@@ -215,7 +215,9 @@ export function canModifyRole(ctx: PolicyContext, target: RoleDefinitionDto): bo
  *   - 또는 팀 스코프 ROLE_MANAGE_OWN + priority 비교
  */
 export function canDeleteRole(ctx: PolicyContext, target: RoleDefinitionDto): boolean {
+  // 시스템 역할(__ALL__, ORIGIN 등) 및 가상 팀(__DEFAULT__) 소속 역할은 어떤 권한자도 삭제 불가
   if (target.system) return false;
+  if (target.teamId && isDefaultTeam(target.teamId)) return false;
   // 케이스 1: GLOBAL
   if (hasGlobalTag(ctx, 'GLOBAL_ROLE_MANAGE')) {
     return !isOwnTopRole(ctx, target.roleId);
