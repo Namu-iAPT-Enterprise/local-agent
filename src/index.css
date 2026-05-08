@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
 
 /* App tokens (chat UI, panels) */
 :root {
@@ -29,9 +31,12 @@
   --radius: 0.625rem;
 }
 
-/* Chat markdown (react-markdown + remark-gfm) — layout isolation + task lists */
+/* Chat markdown / Streamdown */
 .chat-markdown > *:first-child { margin-top: 0 !important; }
 .chat-markdown > *:last-child  { margin-bottom: 0 !important; }
+.chat-markdown {
+  overflow-wrap: anywhere;
+}
 .chat-markdown ul ul,
 .chat-markdown ul ol,
 .chat-markdown ol ul,
@@ -64,6 +69,12 @@
 .chat-markdown table {
   table-layout: fixed;
   width: 100%;
+}
+.chat-markdown [data-state="closed"] {
+  display: none;
+}
+.chat-markdown pre {
+  white-space: pre;
 }
 
 /* Hide scrollbar while keeping scroll behaviour */

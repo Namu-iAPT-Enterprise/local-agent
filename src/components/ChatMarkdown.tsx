@@ -1,14 +1,14 @@
 import React, { Component, useEffect, useMemo } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import type { Components } from 'react-markdown';
-import { normalizeMarkdownForChat } from '../utils/markdownChatNormalize';
-import { padIncompleteStreamingMarkdown } from '../utils/streamingMarkdownPad';
+import { Streamdown } from 'streamdown';
+import { code as streamdownCode } from '@streamdown/code';
+import type { Components } from 'streamdown';
+import { normalizeMarkdownForChat, normalizeMarkdownForChatStreaming } from '../utils/markdownChatNormalize';
 import { debugSessionLog } from '../utils/debugSessionLog';
 
 let debugPingSent = false;
 
 type MarkdownEbState = { error: Error | null };
+
 class MarkdownRenderErrorBoundary extends Component<
   { children: React.ReactNode; rawFallback: string },
   MarkdownEbState
@@ -26,14 +26,12 @@ class MarkdownRenderErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // #region agent log
-    debugSessionLog('ChatMarkdown.tsx:MarkdownRenderErrorBoundary', 'remark/react-markdown render failed', {
-      hypothesisId: 'A',
+    debugSessionLog('ChatMarkdown.tsx:MarkdownRenderErrorBoundary', 'streamdown render failed', {
+      hypothesisId: 'streamdown-boundary',
       errorMessage: error.message,
       stack: error.stack?.slice(0, 1200),
       componentStack: info.componentStack?.slice(0, 1200),
     });
-    // #endregion
   }
 
   render() {
@@ -41,20 +39,20 @@ class MarkdownRenderErrorBoundary extends Component<
     if (error) {
       return (
         <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-          <p className="font-medium">Markdown display error (showing raw text while streaming)</p>
+          <p className="font-medium">Markdown display error</p>
           <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs opacity-90">
             {this.props.rawFallback}
           </pre>
         </div>
       );
     }
+
     return this.props.children;
   }
 }
 
 interface Props {
   content: string;
-  /** True while the assistant message is still receiving tokens */
   streaming?: boolean;
 }
 
@@ -63,39 +61,45 @@ const linkClass =
 
 const markdownComponents: Components = {
   h1: ({ children }) => (
-    <h1 className="mt-4 mb-2 text-2xl font-bold first:mt-0">{children}</h1>
+    <h1 className="mt-5 mb-2 text-[1.95rem] font-semibold tracking-tight text-gray-950 first:mt-0 dark:text-white">
+      {children}
+    </h1>
   ),
   h2: ({ children }) => (
-    <h2 className="mt-4 mb-2 text-xl font-semibold first:mt-0">{children}</h2>
+    <h2 className="mt-5 mb-2 text-[1.45rem] font-semibold tracking-tight text-gray-900 first:mt-0 dark:text-gray-50">
+      {children}
+    </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mt-3 mb-1.5 text-lg font-semibold first:mt-0">{children}</h3>
+    <h3 className="mt-4 mb-1.5 text-[1.1rem] font-semibold text-gray-900 first:mt-0 dark:text-gray-100">
+      {children}
+    </h3>
   ),
   h4: ({ children }) => (
-    <h4 className="mt-3 mb-1.5 text-base font-semibold first:mt-0">{children}</h4>
+    <h4 className="mt-4 mb-1.5 text-base font-semibold text-gray-900 first:mt-0 dark:text-gray-100">
+      {children}
+    </h4>
   ),
-  p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
-  ul: ({ children }) => <ul className="my-2 list-disc pl-6">{children}</ul>,
-  ol: ({ children }) => <ol className="my-2 list-decimal pl-6">{children}</ol>,
-  li: ({ children }) => <li className="my-0.5">{children}</li>,
+  p: ({ children }) => (
+    <p className="my-2.5 text-[15px] leading-[1.75] text-gray-800 first:mt-0 last:mb-0 dark:text-gray-100">
+      {children}
+    </p>
+  ),
+  ul: ({ children }) => <ul className="my-3 list-disc space-y-1.5 pl-6 marker:text-gray-500">{children}</ul>,
+  ol: ({ children }) => <ol className="my-3 list-decimal space-y-1.5 pl-6 marker:text-gray-500">{children}</ol>,
+  li: ({ children }) => <li className="leading-[1.7]">{children}</li>,
   blockquote: ({ children }) => (
-    <blockquote className="my-3 border-l-4 border-gray-300 pl-4 text-gray-700 italic dark:border-gray-600 dark:text-gray-300">
+    <blockquote className="my-4 rounded-r-2xl border-l-[3px] border-blue-300 bg-blue-50/70 px-4 py-3 text-gray-700 dark:border-blue-700 dark:bg-blue-950/20 dark:text-gray-200">
       {children}
     </blockquote>
   ),
   hr: () => <hr className="my-6 border-gray-200 dark:border-gray-700" />,
   a: ({ href, children }) => {
     const h = typeof href === 'string' && href.trim() ? href.trim() : undefined;
-    if (!h) {
-      return <span className={linkClass}>{children}</span>;
-    }
+    if (!h) return <span className={linkClass}>{children}</span>;
+
     return (
-      <a
-        href={h}
-        className={linkClass}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
+      <a href={h} className={linkClass} target="_blank" rel="noopener noreferrer">
         {children}
       </a>
     );
@@ -103,67 +107,43 @@ const markdownComponents: Components = {
   img: ({ src, alt, ...props }) => {
     const s = typeof src === 'string' && src.trim() ? src.trim() : undefined;
     if (!s) return null;
+
     return (
       <img
         {...props}
         src={s}
         alt={typeof alt === 'string' ? alt : ''}
-        className="my-2 max-h-96 max-w-full rounded-lg border border-gray-200 object-contain dark:border-gray-700"
+        className="my-3 max-h-96 max-w-full rounded-2xl border border-gray-200 object-contain shadow-sm dark:border-gray-700"
         loading="lazy"
       />
     );
   },
   table: ({ children }) => (
-    <div className="my-4 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-      <table className="min-w-full w-full table-fixed border-collapse divide-y divide-gray-200 text-[15px] dark:divide-gray-700">
-        {children}
-      </table>
+    <div className="my-4 overflow-x-auto rounded-2xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950/40">
+      <table className="min-w-full border-collapse text-[14px]">{children}</table>
     </div>
   ),
-  thead: ({ children }) => <thead className="bg-gray-50 dark:bg-gray-900/50">{children}</thead>,
+  thead: ({ children }) => <thead className="bg-gray-50/90 dark:bg-gray-900/80">{children}</thead>,
   th: ({ children }) => (
-    <th className="border border-gray-200 px-3 py-2 text-left font-semibold dark:border-gray-700">
+    <th className="border-b border-gray-200 px-4 py-3 text-left text-[12px] font-semibold tracking-[0.04em] text-gray-600 uppercase dark:border-gray-800 dark:text-gray-300">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="border border-gray-200 px-3 py-2 align-top dark:border-gray-700">{children}</td>
-  ),
-  tr: ({ children }) => <tr className="divide-x divide-gray-200 dark:divide-gray-700">{children}</tr>,
-  pre: ({ children }) => (
-    <pre className="my-3 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-900/60">
+    <td className="border-t border-gray-100 px-4 py-3 align-top text-gray-700 dark:border-gray-900 dark:text-gray-200">
       {children}
-    </pre>
+    </td>
   ),
-  code: ({ className, children, ...props }) => {
-    const isBlock = Boolean(className?.includes('language-'));
-    if (isBlock) {
-      return (
-        <code className={`${className ?? ''} font-mono text-sm`} {...props}>
-          {children}
-        </code>
-      );
-    }
-    return (
-      <code
-        className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-gray-800"
-        {...props}
-      >
-        {children}
-      </code>
-    );
-  },
+  tr: ({ children }) => <tr className="align-top">{children}</tr>,
+  inlineCode: ({ children, ...props }) => (
+    <code
+      className="rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[0.9em] text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+      {...props}
+    >
+      {children}
+    </code>
+  ),
 };
-
-/**
- * Chat markdown via [react-markdown](https://github.com/remarkjs/react-markdown) + `remark-gfm`.
- * Incomplete tables are padded while `streaming` is true so GFM can render a grid early.
- */
-/** While tokens stream, skip heavy LLM normalizers — they assume complete fences/tables and can corrupt or break remark mid-stream. */
-function normalizeForStreamingChunk(raw: string): string {
-  const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  return padIncompleteStreamingMarkdown(text);
-}
 
 export default function ChatMarkdown({ content, streaming = false }: Props) {
   const safeContent = typeof content === 'string' ? content : String(content ?? '');
@@ -171,51 +151,47 @@ export default function ChatMarkdown({ content, streaming = false }: Props) {
   useEffect(() => {
     if (debugPingSent) return;
     debugPingSent = true;
-    // #region agent log
-    debugSessionLog('ChatMarkdown.tsx:ping', 'first ChatMarkdown mount — confirms IPC logging', {
-      hypothesisId: 'ping',
+    debugSessionLog('ChatMarkdown.tsx:ping', 'first Streamdown ChatMarkdown mount', {
+      hypothesisId: 'streamdown-ping',
       hasElectronDebug: Boolean(typeof window !== 'undefined' && window.electronAPI?.debugSessionLog),
     });
-    // #endregion
   }, []);
 
   const md = useMemo(() => {
     try {
-      if (streaming) {
-        return normalizeForStreamingChunk(safeContent);
-      }
-      return normalizeMarkdownForChat(safeContent);
+      return streaming
+        ? normalizeMarkdownForChatStreaming(safeContent)
+        : normalizeMarkdownForChat(safeContent);
     } catch (e) {
-      // #region agent log
       debugSessionLog('ChatMarkdown.tsx:useMemo', 'normalize threw', {
-        hypothesisId: 'B',
+        hypothesisId: 'streamdown-normalize',
         errorMessage: e instanceof Error ? e.message : String(e),
         stack: e instanceof Error ? e.stack?.slice(0, 800) : undefined,
         contentLen: safeContent.length,
         streaming,
       });
-      // #endregion
       return safeContent;
     }
   }, [safeContent, streaming]);
 
   return (
     <div
-      className="chat-markdown min-h-[1.5em] min-w-0 max-w-full break-words text-left text-[15px] leading-[1.65] text-gray-800 antialiased dark:text-gray-100"
+      className="chat-markdown min-h-[1.5em] min-w-0 max-w-full break-words text-left text-[15px] leading-[1.7] text-gray-800 antialiased dark:text-gray-100"
       style={{ contain: 'layout style' }}
     >
       <MarkdownRenderErrorBoundary rawFallback={safeContent}>
-        {/*
-          While streaming: omit remark-gfm — GFM table/strikethrough/task parsers often choke on partial input.
-          After stream: full GFM + normalizeMarkdownForChat (when streaming is false).
-        */}
-        <ReactMarkdown
-          key={streaming ? 'md-stream' : 'md-final'}
-          remarkPlugins={streaming ? [] : [remarkGfm]}
+        <Streamdown
+          className="w-full"
           components={markdownComponents}
+          mode={streaming ? 'streaming' : 'static'}
+          parseIncompleteMarkdown
+          isAnimating={streaming}
+          animated={false}
+          shikiTheme={['github-light', 'github-dark']}
+          plugins={{ code: streamdownCode }}
         >
           {md}
-        </ReactMarkdown>
+        </Streamdown>
       </MarkdownRenderErrorBoundary>
     </div>
   );

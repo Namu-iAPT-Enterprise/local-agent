@@ -553,6 +553,7 @@ export function useChat() {
     });
   };
 
+
   const setLastAssistantError = (msg: string) => {
     setMessages((prev) => {
       const last = prev[prev.length - 1];
@@ -602,19 +603,21 @@ export function useChat() {
     // and inject a document-creation hint for the API call.
     const SKILL_PROMPTS: Record<string, string> = {
       docx:
-        'You are creating a Word document. Respond with well-structured Markdown: use # headings, **bold**, bullet lists, and numbered lists where appropriate. Do NOT include any prose like "Here is your document" — output only the document content.\n\n' +
+        'You are creating a Word document. Respond with well-structured Markdown: use # headings, **bold**, bullet lists, and numbered lists where appropriate. ' +
+        'Do NOT output code fences (```), SQL blocks, or programming code. Do NOT include meta commentary like "Here is your document". Output only the document content.\n\n' +
         LLM_MARKDOWN_STRUCTURE_HINT,
       pptx:
-        'You are creating a PowerPoint presentation. Structure your response as Markdown:\n- Use "# Title" for the presentation title (first line only)\n- Use "## Slide Title" for each slide (one ## per slide)\n- Under each slide, use bullet points (- item) for content\n- Keep bullets short (one idea per bullet, max ~8 words)\n- Aim for 5–10 slides total\n- Do NOT include any prose outside the structure — output only the slide content.\n\n' +
+        'You are creating a PowerPoint presentation. Structure your response as Markdown:\n- Use "# Title" for the presentation title (first line only)\n- Use "## Slide Title" for each slide (one ## per slide)\n- Under each slide, use bullet points (- item) for content\n- Keep bullets short (one idea per bullet, max ~8 words)\n- Aim for 5–10 slides total\n- Do NOT include code fences or programming code.\n\n' +
         LLM_MARKDOWN_STRUCTURE_HINT,
       xlsx:
-        'You are creating an Excel spreadsheet. Respond with Markdown tables representing the spreadsheet data.\n\n' +
+        'You are creating an Excel spreadsheet. Respond with Markdown tables representing the spreadsheet data. Do NOT output code fences or programming code.\n\n' +
         LLM_MARKDOWN_STRUCTURE_HINT,
       pdf:
-        'You are creating a PDF document. Respond with well-structured Markdown.\n\n' +
+        'You are creating a PDF document. Respond with well-structured Markdown. Do NOT output code fences or programming code.\n\n' +
         LLM_MARKDOWN_STRUCTURE_HINT,
       hwpx:
-        'You are drafting content suitable for a Korean 한글 / HWPX document (보고서, 공문, 기안문). Follow the hwpx skill: clear # 제목, **강조**, bullet/numbered lists, formal tone where appropriate. Output only the document body in Markdown — no meta commentary. The download card builds a real .hwpx (python-hwpx + namespace fix) via the local converter service.\n\n' +
+        'You are drafting content suitable for a Korean 한글 / HWPX document (보고서, 공문, 기안문). Follow the hwpx skill: clear # 제목, **강조**, bullet/numbered lists, formal tone where appropriate. ' +
+        'Do NOT output code fences (```), SQL blocks, XML snippets, or programming code. Output only document content.\n\n' +
         LLM_MARKDOWN_STRUCTURE_HINT,
     };
 
@@ -677,8 +680,6 @@ export function useChat() {
             break;
           case 'message':
             appendToken(event.data);
-            break;
-          case 'done':
             break;
           case 'error':
             setLastAssistantError(friendlyError(event.data));

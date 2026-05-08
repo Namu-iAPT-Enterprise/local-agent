@@ -1,4 +1,5 @@
 import './index.css';
+import 'streamdown/styles.css';
 import { createRoot } from 'react-dom/client';
 import { createElement } from 'react';
 import App from './App';

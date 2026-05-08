@@ -279,6 +279,22 @@ function fixChatMarkdownLayout(text: string): string {
   return s;
 }
 
+/**
+ * Streaming-safe normalizer:
+ * apply only lightweight, low-risk transforms while tokens are still arriving.
+ * Avoid aggressive unfenced-code inference during stream to reduce jitter.
+ */
+export function normalizeMarkdownForChatStreaming(raw: string): string {
+  let result = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (!result.trim()) return result;
+  result = applyOutsideCodeFences(result, fixModelBlockSeparators);
+  result = fixFencedCodeGlitches(result);
+  result = fixLlmMarkdownTablesAndStructure(result);
+  result = fixChatMarkdownLayout(result);
+  result = ensureClosedFence(result);
+  return result;
+}
+
 /** Preprocess raw assistant markdown so GFM can parse tables, headings, and fences. */
 export function normalizeMarkdownForChat(raw: string): string {
   let result = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');

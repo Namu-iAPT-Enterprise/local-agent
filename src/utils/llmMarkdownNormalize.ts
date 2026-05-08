@@ -34,8 +34,15 @@ export function normalizeLlmMarkdownStructure(text: string): string {
   const longest = nonEmpty.length ? Math.max(...nonEmpty.map((ln) => ln.length)) : 0;
   const looksStructured = nonEmpty.length >= 4 && lines.length >= 4 && longest < 900;
 
+  // Split glued headings: "text## Heading", "## A### B"
   t = t.replace(/(?<=[^\n#])(?=#+(?:\s|\d))/g, '\n');
+  t = t.replace(/(#{1,6}[^\n#]+)(?=#{1,6}\s)/g, '$1\n');
   t = t.replace(/^\n+/, '');
+
+  // Common glue from token streaming: "Title:- item", ".- item", "word- item"
+  t = t.replace(/:\s*-\s+/g, ':\n- ');
+  t = t.replace(/([.!?])-\s+/g, '$1\n- ');
+  t = t.replace(/([^\n])-\s([A-Z가-힣])/g, '$1\n- $2');
 
   t = t.replace(/(?<=[가-힣.!?])(?=\*\s{2,})/gu, '\n');
   t = t.replace(/(?<=[)\]])\s*(?=\*\s{2,})/g, '\n');
@@ -54,6 +61,8 @@ export function normalizeLlmMarkdownStructure(text: string): string {
   );
   t = t.replace(/(?<=[.!?])\s+-\s+/g, '\n- ');
   t = t.replace(/(?<=[.!?])\s+(\d+\.\s+)/g, '\n$1');
+  // Keep output readable even when chunks arrive densely.
+  t = t.replace(/\n{3,}/g, '\n\n');
   return t;
 }
 
@@ -76,4 +85,36 @@ export function normalizeLlmMarkdownForExport(raw: string): string {
   }
   text = fixGfmTableGlue(text);
   return normalizeLlmMarkdownStructure(text);
+}
+
+/**
+ * HWPX converter orchestration normalizer:
+ * - removes instruction-like section labels leaked from LLM
+ * - stabilizes metadata lines (제목/수신/참조/발신/시행일)
+ * - normalizes attachment block cues
+ */
+export function normalizeLlmMarkdownForHwpx(raw: string): string {
+  let text = normalizeLlmMarkdownForExport(raw);
+  if (!text.trim()) return text;
+
+  // Remove bracketed orchestration markers but keep content lines.
+  text = text.replace(/^\s*\[(문서\s*메타|문서메타|본문|붙임|서명)\]\s*$/gim, '');
+  // Remove plain leaked labels without values.
+  text = text.replace(/^\s*(문서\s*메타|문서메타|본문|붙임|서명)\s*$/gim, '');
+  // Collapse repeated artifacts.
+  text = text.replace(/본문본문/g, '본문');
+  text = text.replace(/\s#{2,6}\s*/g, ' ');
+  text = text.replace(/^\s*---+\s*$/gim, '');
+
+  // Keep metadata labels line-oriented.
+  const labels = ['제목:', '수신:', '참조:', '발신:', '시행일:'];
+  for (const label of labels) {
+    const escaped = label.replace(':', '\\:');
+    text = text.replace(new RegExp(`\\s*${escaped}\\s*`, 'g'), `\n${label} `);
+  }
+
+  // Normalize numbered list spacing for attachments/body.
+  text = text.replace(/(?<!\n)(\d+\.)\s+/g, '\n$1 ');
+  text = text.replace(/\n{3,}/g, '\n\n');
+  return text.trim();
 }

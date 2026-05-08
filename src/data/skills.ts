@@ -14,13 +14,6 @@ export const catalogSkills: Skill[] = [
   { id: 'xlsx',                    name: 'xlsx',                    icon: '📗', color: 'bg-green-500',  source: 'builtin',     description: 'Create and analyse Excel spreadsheets. Formulas, dashboards, trackers, and data analysis.' },
   { id: 'pdf',                     name: 'pdf',                     icon: '📄', color: 'bg-purple-500', source: 'builtin',     description: 'PDF operations: extract text/tables, merge/split/rotate, watermarks, forms, OCR, encrypt/decrypt, create or export PDFs (Anthropic pdf skill).' },
   { id: 'hwpx',                    name: 'hwpx',                    icon: '🔤', color: 'bg-sky-600',    source: 'builtin',     description: '한글 HWPX documents: reports, 공문, 기안문. Agent uses gonggong_hwpxskills; chat export is real .hwpx via hwpx-server (run npm run hwpx-server in dev).' },
-  { id: 'mermaid',                 name: 'mermaid',                 icon: '🧜', color: 'bg-teal-500',   source: 'builtin',     description: 'Create flowcharts, sequence diagrams, state diagrams, class diagrams, and ER diagrams.' },
-  { id: 'skill-creator',           name: 'skill-creator',           icon: '⚙️', color: 'bg-orange-500', source: 'builtin',     description: 'Create, update, and optimise skills. Includes eval and performance benchmarking.' },
-  { id: 'morph-ppt',               name: 'morph-ppt',               icon: '✨', color: 'bg-teal-500',   source: 'builtin',     description: 'Generate Morph-animated PowerPoint presentations with multiple visual styles.' },
-  { id: 'officecli-pitch-deck',    name: 'officecli-pitch-deck',    icon: '🎯', color: 'bg-pink-600',   source: 'builtin',     description: 'Build investor pitch decks, product launch decks, and sales presentations.' },
-  { id: 'officecli-financial-model', name: 'officecli-financial-model', icon: '💰', color: 'bg-orange-400', source: 'builtin', description: 'Build formula-driven financial models: 3-statement, DCF valuations, cap tables.' },
-  { id: 'officecli-academic-paper', name: 'officecli-academic-paper', icon: '📚', color: 'bg-green-600',  source: 'builtin',  description: 'Write formally structured academic papers with TOC, LaTeX equations, footnotes, and endnotes.' },
-  { id: 'officecli-data-dashboard', name: 'officecli-data-dashboard', icon: '📈', color: 'bg-blue-600',  source: 'builtin',   description: 'Turn CSV data into polished Excel dashboards with KPI cards, charts, and sparklines.' },
 ];
 
 // ── Installed skills storage ───────────────────────────────────────────────────
