@@ -85,7 +85,8 @@ export async function fetchUserPermissionTags(userId: string): Promise<RoleGetRe
 
 /**
  * POST /api/role/assign
- * Assigns a role to a user. Requires GLOBAL_ROLE_ASSIGN + ADMIN + manageableBy.
+ * Assigns a role to a user. Requires GLOBAL_ROLE_MANAGE + ADMIN + manageableBy.
+ * [v2 통합] ASSIGN/REVOKE/CREATE/MODIFY/DELETE → MANAGE 단일 태그.
  */
 export async function assignRole(userId: string, roleId: string): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/role/assign`, {
@@ -99,7 +100,8 @@ export async function assignRole(userId: string, roleId: string): Promise<void> 
 
 /**
  * DELETE /api/role/revoke
- * Revokes a role from a user. Requires GLOBAL_ROLE_REVOKE + ADMIN + manageableBy.
+ * Revokes a role from a user. Requires GLOBAL_ROLE_MANAGE + ADMIN + manageableBy.
+ * [v2 통합] ASSIGN/REVOKE/CREATE/MODIFY/DELETE → MANAGE 단일 태그.
  */
 export async function revokeRole(userId: string, roleId: string): Promise<void> {
   const res = await fetchWithAuth(`${API_BASE}/api/role/revoke`, {

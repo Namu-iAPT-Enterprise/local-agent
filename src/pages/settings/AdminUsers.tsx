@@ -347,8 +347,9 @@ function SectionAssign({ tags, allRoles, allTeams, myRoleIds = [] }: {
 }) {
   const canView      = can(tags, 'GLOBAL_ROLE_VIEW', 'ROLE_VIEW_OWN');
   const canViewGlobal = can(tags, 'GLOBAL_ROLE_VIEW');
-  const canAssign    = can(tags, 'GLOBAL_ROLE_ASSIGN', 'ROLE_ASSIGN_OWN');
-  const canRevoke    = can(tags, 'GLOBAL_ROLE_REVOKE', 'ROLE_REVOKE_OWN');
+  // [v2 통합] ASSIGN/REVOKE → MANAGE 로 통합
+  const canAssign    = can(tags, 'GLOBAL_ROLE_MANAGE', 'ROLE_MANAGE_OWN');
+  const canRevoke    = can(tags, 'GLOBAL_ROLE_MANAGE', 'ROLE_MANAGE_OWN');
 
   const [searchId, setSearchId] = useState('');
   const [lookupSt, setLookupSt] = useState<'idle'|'loading'|'found'|'not-found'|'error'>('idle');
@@ -507,8 +508,9 @@ function SectionMembers({ tags, allRoles, allTeams, myRoleIds = [] }: {
   myRoleIds?: string[];
 }) {
   const canViewMembers = can(tags, 'TEAM_MEMBER_VIEW', 'GLOBAL_ROLE_VIEW');
-  const canAssign = can(tags, 'GLOBAL_ROLE_ASSIGN', 'ROLE_ASSIGN_OWN');
-  const canRevoke = can(tags, 'GLOBAL_ROLE_REVOKE', 'ROLE_REVOKE_OWN');
+  // [v2 통합] ASSIGN/REVOKE → MANAGE 로 통합
+  const canAssign = can(tags, 'GLOBAL_ROLE_MANAGE', 'ROLE_MANAGE_OWN');
+  const canRevoke = can(tags, 'GLOBAL_ROLE_MANAGE', 'ROLE_MANAGE_OWN');
 
   const [selectedTeam, setSelectedTeam] = useState('');
   const [members, setMembers] = useState<TeamMemberInfo[]>([]);
@@ -752,9 +754,10 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
   onRefresh: () => void;
   myRoleIds?: string[];
 }) {
-  const canCreate = can(tags, 'GLOBAL_ROLE_CREATE', 'ROLE_CREATE_OWN');
-  const canModify = can(tags, 'GLOBAL_ROLE_MODIFY', 'ROLE_MODIFY_OWN');
-  const canDelete = can(tags, 'GLOBAL_ROLE_DELETE', 'ROLE_DELETE_OWN');
+  // [v2 통합] CRUD → MANAGE 로 통합. 한 태그가 생성·수정·삭제·배정·회수를 모두 수행.
+  const canCreate = can(tags, 'GLOBAL_ROLE_MANAGE', 'ROLE_MANAGE_OWN');
+  const canModify = can(tags, 'GLOBAL_ROLE_MANAGE', 'ROLE_MANAGE_OWN');
+  const canDelete = can(tags, 'GLOBAL_ROLE_MANAGE', 'ROLE_MANAGE_OWN');
   const canAssignAdmin = can(tags, 'GLOBAL_ROLE_PERMISSION_ASSIGN');
   const canAssignPerm = canCreate || canModify;
 
@@ -1127,10 +1130,12 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
   allTeams: TeamDto[];
   onRefreshTeams: () => void;
 }) {
-  const canCreate = can(tags, 'GLOBAL_TEAM_CREATE');
+  // [v2 통합] GLOBAL_TEAM_CREATE/MANAGE/DELETE → GLOBAL_TEAM_MANAGE 단일화
+  // [v2 통합] TEAM_DELETE_OWN + TEAM_MANAGE_OWN → TEAM_MANAGE_OWN
+  const canCreate = can(tags, 'GLOBAL_TEAM_MANAGE');
   const canManage = can(tags, 'GLOBAL_TEAM_MANAGE', 'TEAM_MANAGE_OWN');
-  const canDelete = can(tags, 'GLOBAL_TEAM_DELETE', 'TEAM_DELETE_OWN');
-  const canView   = can(tags, 'TEAM_VIEW_ANY', 'GLOBAL_TEAM_CREATE', 'GLOBAL_TEAM_MANAGE', 'TEAM_MANAGE_OWN', 'GLOBAL_TEAM_DELETE', 'TEAM_DELETE_OWN');
+  const canDelete = can(tags, 'GLOBAL_TEAM_MANAGE', 'TEAM_MANAGE_OWN');
+  const canView   = can(tags, 'TEAM_VIEW_ANY', 'GLOBAL_TEAM_MANAGE', 'TEAM_MANAGE_OWN');
 
   const [creating, setCreating]   = useState(false);
   const [editingId, setEditingId] = useState<string|null>(null);
@@ -1287,8 +1292,9 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
 // ── Section: 캐시 관리 ─────────────────────────────────────────────────────────
 
 function SectionCache({ tags }: { tags: string[] }) {
-  const canUser = can(tags, 'GLOBAL_CACHE_RELOAD_USER');
-  const canAll  = can(tags, 'GLOBAL_CACHE_RELOAD_ALL');
+  // [v2 통합] GLOBAL_CACHE_RELOAD_USER + GLOBAL_CACHE_RELOAD_ALL → GLOBAL_CACHE_RELOAD
+  const canUser = can(tags, 'GLOBAL_CACHE_RELOAD');
+  const canAll  = can(tags, 'GLOBAL_CACHE_RELOAD');
 
   const [userId, setUserId]   = useState('');
   const [userSt, setUserSt]   = useState<'idle'|'loading'|'success'|'error'>('idle');
@@ -1322,7 +1328,7 @@ function SectionCache({ tags }: { tags: string[] }) {
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">특정 사용자의 역할 캐시를 무효화합니다.</p>
           </div>
-          {!canUser && <PermissionBadge tag="GLOBAL_CACHE_RELOAD_USER" />}
+          {!canUser && <PermissionBadge tag="GLOBAL_CACHE_RELOAD" />}
         </div>
         <div className="flex gap-2">
           <input value={userId} onChange={e => setUserId(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleUserReload()} disabled={!canUser} placeholder="userId" className={`${inputCls} flex-1 disabled:opacity-50 disabled:cursor-not-allowed`} />
@@ -1339,7 +1345,7 @@ function SectionCache({ tags }: { tags: string[] }) {
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">모든 사용자의 역할 캐시를 한 번에 초기화합니다. 역할 정의 변경 후 즉시 반영할 때 사용하세요.</p>
           </div>
-          {!canAll && <PermissionBadge tag="GLOBAL_CACHE_RELOAD_ALL" />}
+          {!canAll && <PermissionBadge tag="GLOBAL_CACHE_RELOAD" />}
         </div>
         <ActionBtn onClick={handleAllReload} disabled={!canAll} loading={allSt === 'loading'} variant="danger" icon={<RefreshCw size={13} />}>전체 캐시 초기화</ActionBtn>
         {allSt !== 'idle' && <Feedback status={allSt} msg={allMsg} />}
@@ -1379,11 +1385,12 @@ export default function AdminUsers({ permissionTags = [], myRoleIds = [] }: Admi
   const refreshAll = useCallback(() => { loadAll(); }, [loadAll]);
 
   // Determine which panels to show based on permissions
-  const showAssign = can(tags, 'GLOBAL_ROLE_VIEW', 'ROLE_VIEW_OWN', 'GLOBAL_ROLE_ASSIGN', 'ROLE_ASSIGN_OWN', 'GLOBAL_ROLE_REVOKE', 'ROLE_REVOKE_OWN');
-  const showDefine = can(tags, 'GLOBAL_ROLE_CREATE', 'ROLE_CREATE_OWN', 'GLOBAL_ROLE_MODIFY', 'ROLE_MODIFY_OWN', 'GLOBAL_ROLE_DELETE', 'ROLE_DELETE_OWN', 'GLOBAL_ROLE_VIEW', 'ROLE_VIEW_OWN');
-  const showTeam   = can(tags, 'GLOBAL_TEAM_CREATE', 'GLOBAL_TEAM_MANAGE', 'TEAM_MANAGE_OWN', 'GLOBAL_TEAM_DELETE', 'TEAM_DELETE_OWN', 'TEAM_VIEW_ANY');
+  // [v2 통합] CRUD + ASSIGN/REVOKE → MANAGE 통합 태그로 단일화
+  const showAssign = can(tags, 'GLOBAL_ROLE_VIEW', 'ROLE_VIEW_OWN', 'GLOBAL_ROLE_MANAGE', 'ROLE_MANAGE_OWN');
+  const showDefine = can(tags, 'GLOBAL_ROLE_MANAGE', 'ROLE_MANAGE_OWN', 'GLOBAL_ROLE_VIEW', 'ROLE_VIEW_OWN');
+  const showTeam   = can(tags, 'GLOBAL_TEAM_MANAGE', 'TEAM_MANAGE_OWN', 'TEAM_VIEW_ANY');
   const showMembers = can(tags, 'TEAM_MEMBER_VIEW', 'GLOBAL_ROLE_VIEW');
-  const showCache  = can(tags, 'GLOBAL_CACHE_RELOAD_USER', 'GLOBAL_CACHE_RELOAD_ALL');
+  const showCache  = can(tags, 'GLOBAL_CACHE_RELOAD');
   const showBackup  = can(tags, 'GLOBAL_BACKUP_CREATE', 'GLOBAL_BACKUP_RESTORE');
   const showLog     = can(tags, 'GLOBAL_LOG_VIEW');
 

@@ -51,7 +51,7 @@ interface ScenarioResult {
 function buildScenarios(): Scenario[] {
   const TEAM   = 'ATTACK_TEST_TEAM';
   const TEAM_B = 'ATTACK_OTHER_TEAM';
-  const LIMITED = 'ATK_LIMITED';       // attacker's role: ROLE_MODIFY_OWN + ROLE_ASSIGN_OWN + CHAT_MESSAGE
+  const LIMITED = 'ATK_LIMITED';       // attacker's role: ROLE_MANAGE_OWN + CHAT_MESSAGE  ([v2 통합] CRUD/ASSIGN/REVOKE 일체)
   const TARGET_A = 'ATK_TARGET_A';    // 같은 팀, manageableBy 없음
   const TARGET_B = 'ATK_TARGET_B';    // 같은 팀, manageableBy: [LIMITED]
   const OTHER_ROLE = 'ATK_OTHER_ROLE';// 다른 팀 역할
@@ -63,18 +63,18 @@ function buildScenarios(): Scenario[] {
       title: 'GLOBAL 태그 밀수',
       category: '권한 상승',
       categoryColor: 'text-red-400',
-      description: 'ROLE_MODIFY_OWN만 가진 공격자가 GLOBAL 스코프 태그를 역할에 끼워넣으려 시도합니다.',
+      description: 'ROLE_MANAGE_OWN만 가진 공격자가 GLOBAL 스코프 태그를 역할에 끼워넣으려 시도합니다.',
       steps: [
         { label: '팀 생성', actor: 'admin', method: 'POST', path: `/api/team`, body: { teamId: TEAM, name: '공격 테스트팀', color: '#e74c3c' }, expected: [200, 201, 409], role: 'info' },
         { label: '타깃 역할 생성 (같은 팀)', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: TARGET_B, teamId: TEAM, displayName: '테스트 타깃 B', permissionTagIds: ['CHAT_MESSAGE'], manageableByRoleIds: [] }, expected: [200, 201, 409], role: 'info' },
-        { label: '공격자 역할 생성', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_MODIFY_OWN', 'ROLE_ASSIGN_OWN', 'ROLE_CREATE_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [LIMITED] }, expected: [200, 201, 409], role: 'info' },
+        { label: '공격자 역할 생성', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_MANAGE_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [LIMITED] }, expected: [200, 201, 409], role: 'info' },
         { label: '공격자에게 역할 배정', actor: 'admin', method: 'POST', path: `/api/role/assign`, body: { userId: '__ATTACKER__', roleId: LIMITED }, expected: [200, 201], role: 'info' },
         {
-          label: '🔴 공격: GLOBAL_TEAM_DELETE 태그 끼워넣기',
+          label: '🔴 공격: GLOBAL_TEAM_MANAGE 태그 끼워넣기',
           actor: 'attacker',
           method: 'PATCH',
           path: `/api/role/define/${TARGET_B}`,
-          body: { permissionTagIds: ['CHAT_MESSAGE', 'GLOBAL_TEAM_DELETE'] },
+          body: { permissionTagIds: ['CHAT_MESSAGE', 'GLOBAL_TEAM_MANAGE'] },
           expected: 403,
           role: 'should-block',
           note: 'GLOBAL_ROLE_PERMISSION_ASSIGN 없으므로 차단되어야 함',
@@ -91,12 +91,12 @@ function buildScenarios(): Scenario[] {
       title: '다른 팀 역할 무단 수정',
       category: '권한 상승',
       categoryColor: 'text-red-400',
-      description: 'ROLE_MODIFY_OWN만 가진 공격자가 소속되지 않은 팀의 역할을 수정하려 시도합니다.',
+      description: 'ROLE_MANAGE_OWN만 가진 공격자가 소속되지 않은 팀의 역할을 수정하려 시도합니다.',
       steps: [
         { label: '공격자 팀 생성', actor: 'admin', method: 'POST', path: `/api/team`, body: { teamId: TEAM, name: '공격자 팀', color: '#e74c3c' }, expected: [200, 201, 409], role: 'info' },
         { label: '피해자 팀 생성', actor: 'admin', method: 'POST', path: `/api/team`, body: { teamId: TEAM_B, name: '피해자 팀', color: '#3498db' }, expected: [200, 201, 409], role: 'info' },
         { label: '피해자 팀 역할 생성', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: OTHER_ROLE, teamId: TEAM_B, displayName: '피해 역할', permissionTagIds: ['CHAT_MESSAGE'], manageableByRoleIds: [] }, expected: [200, 201, 409], role: 'info' },
-        { label: '공격자 역할 생성 (TEAM 소속)', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_MODIFY_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [] }, expected: [200, 201, 409], role: 'info' },
+        { label: '공격자 역할 생성 (TEAM 소속)', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_MANAGE_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [] }, expected: [200, 201, 409], role: 'info' },
         { label: '공격자에게 역할 배정', actor: 'admin', method: 'POST', path: `/api/role/assign`, body: { userId: '__ATTACKER__', roleId: LIMITED }, expected: [200, 201], role: 'info' },
         {
           label: '🔴 공격: 피해자 팀 역할 수정',
@@ -121,11 +121,11 @@ function buildScenarios(): Scenario[] {
       title: 'manageableBy 우회 — 미등록 역할 배정',
       category: 'manageableBy',
       categoryColor: 'text-amber-400',
-      description: 'ROLE_ASSIGN_OWN이 있어도 manageableBy에 등록되지 않은 역할은 배정할 수 없어야 합니다.',
+      description: 'ROLE_MANAGE_OWN이 있어도 manageableBy에 등록되지 않은 역할은 배정할 수 없어야 합니다.',
       steps: [
         { label: '팀 생성', actor: 'admin', method: 'POST', path: `/api/team`, body: { teamId: TEAM, name: '공격 테스트팀', color: '#e74c3c' }, expected: [200, 201, 409], role: 'info' },
         { label: '타깃 역할 생성 (manageableBy 없음)', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: TARGET_A, teamId: TEAM, displayName: '타깃 A', permissionTagIds: ['CHAT_MESSAGE'], manageableByRoleIds: [] }, expected: [200, 201, 409], role: 'info' },
-        { label: '공격자 역할 생성', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_ASSIGN_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [LIMITED] }, expected: [200, 201, 409], role: 'info' },
+        { label: '공격자 역할 생성', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_MANAGE_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [LIMITED] }, expected: [200, 201, 409], role: 'info' },
         { label: '공격자에게 역할 배정', actor: 'admin', method: 'POST', path: `/api/role/assign`, body: { userId: '__ATTACKER__', roleId: LIMITED }, expected: [200, 201], role: 'info' },
         {
           label: '🔴 공격: manageableBy 없는 역할 배정 시도',
@@ -135,7 +135,7 @@ function buildScenarios(): Scenario[] {
           body: { userId: '__ATTACKER__', roleId: TARGET_A },
           expected: 403,
           role: 'should-block',
-          note: 'ROLE_ASSIGN_OWN이 있어도 manageableBy 미등록이면 차단',
+          note: 'ROLE_MANAGE_OWN이 있어도 manageableBy 미등록이면 차단',
         },
         { label: '정리', actor: 'admin', method: 'DELETE', path: `/api/role/define/${TARGET_A}`, expected: [200, 204, 404], role: 'info' },
         { label: '정리', actor: 'admin', method: 'DELETE', path: `/api/role/define/${LIMITED}`, expected: [200, 204, 404], role: 'info' },
@@ -152,7 +152,7 @@ function buildScenarios(): Scenario[] {
       description: '팀 내에서 자신의 역할과 동급(priority) 또는 상위 역할을 삭제할 수 없어야 합니다.',
       steps: [
         { label: '팀 생성', actor: 'admin', method: 'POST', path: `/api/team`, body: { teamId: TEAM, name: '공격 테스트팀', color: '#e74c3c' }, expected: [200, 201, 409], role: 'info' },
-        { label: '공격자 역할 생성 (priority 자동 배정)', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_DELETE_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [] }, expected: [200, 201, 409], role: 'info' },
+        { label: '공격자 역할 생성 (priority 자동 배정)', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_MANAGE_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [] }, expected: [200, 201, 409], role: 'info' },
         { label: '동급 타깃 역할 생성', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: TARGET_A, teamId: TEAM, displayName: '동급 타깃', permissionTagIds: ['CHAT_MESSAGE'], manageableByRoleIds: [] }, expected: [200, 201, 409], role: 'info' },
         { label: '우선순위 동일하게 재정렬', actor: 'admin', method: 'PATCH', path: `/api/role/define/reorder?teamId=${TEAM}`, body: [LIMITED, TARGET_A], expected: [200, 204], role: 'info', note: 'LIMITED와 TARGET_A를 priority=1, 2로 설정' },
         { label: '공격자에게 역할 배정', actor: 'admin', method: 'POST', path: `/api/role/assign`, body: { userId: '__ATTACKER__', roleId: LIMITED }, expected: [200, 201], role: 'info' },
@@ -180,14 +180,14 @@ function buildScenarios(): Scenario[] {
       description: '자신의 역할에 GLOBAL_ROLE_PERMISSION_ASSIGN을 셀프 부여하여 권한을 올리려 시도합니다.',
       steps: [
         { label: '팀 생성', actor: 'admin', method: 'POST', path: `/api/team`, body: { teamId: TEAM, name: '공격 테스트팀', color: '#e74c3c' }, expected: [200, 201, 409], role: 'info' },
-        { label: '공격자 역할 생성', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_MODIFY_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [LIMITED] }, expected: [200, 201, 409], role: 'info' },
+        { label: '공격자 역할 생성', actor: 'admin', method: 'POST', path: `/api/role/define`, body: { roleId: LIMITED, teamId: TEAM, displayName: '제한된 역할', permissionTagIds: ['ROLE_MANAGE_OWN', 'CHAT_MESSAGE'], manageableByRoleIds: [LIMITED] }, expected: [200, 201, 409], role: 'info' },
         { label: '공격자에게 역할 배정', actor: 'admin', method: 'POST', path: `/api/role/assign`, body: { userId: '__ATTACKER__', roleId: LIMITED }, expected: [200, 201], role: 'info' },
         {
           label: '🔴 공격: 본인 역할에 GLOBAL_ROLE_PERMISSION_ASSIGN 추가',
           actor: 'attacker',
           method: 'PATCH',
           path: `/api/role/define/${LIMITED}`,
-          body: { permissionTagIds: ['ROLE_MODIFY_OWN', 'CHAT_MESSAGE', 'GLOBAL_ROLE_PERMISSION_ASSIGN'] },
+          body: { permissionTagIds: ['ROLE_MANAGE_OWN', 'CHAT_MESSAGE', 'GLOBAL_ROLE_PERMISSION_ASSIGN'] },
           expected: 403,
           role: 'should-block',
           note: 'GLOBAL 태그 포함 시도 → GLOBAL_ROLE_PERMISSION_ASSIGN 없으므로 차단',
@@ -247,15 +247,15 @@ function buildScenarios(): Scenario[] {
       title: 'ORIGIN 역할 직접 배정 시도',
       category: 'manageableBy',
       categoryColor: 'text-amber-400',
-      description: 'GLOBAL_ROLE_ASSIGN이 있어도 manageableBy에 없는 ORIGIN은 배정할 수 없어야 합니다.',
+      description: 'GLOBAL_ROLE_MANAGE가 있어도 manageableBy에 없는 ORIGIN은 배정할 수 없어야 합니다.',
       steps: [
         { label: '팀 생성', actor: 'admin', method: 'POST', path: `/api/team`, body: { teamId: TEAM, name: '공격 테스트팀', color: '#e74c3c' }, expected: [200, 201, 409], role: 'info' },
         {
-          label: '공격자 역할 생성 (GLOBAL_ROLE_ASSIGN 포함)',
+          label: '공격자 역할 생성 (GLOBAL_ROLE_MANAGE 포함)',
           actor: 'admin',
           method: 'POST',
           path: `/api/role/define`,
-          body: { roleId: LIMITED, teamId: TEAM, displayName: '전역 배정자', permissionTagIds: ['GLOBAL_ROLE_ASSIGN', 'CHAT_MESSAGE'], manageableByRoleIds: [] },
+          body: { roleId: LIMITED, teamId: TEAM, displayName: '전역 배정자', permissionTagIds: ['GLOBAL_ROLE_MANAGE', 'CHAT_MESSAGE'], manageableByRoleIds: [] },
           expected: [200, 201, 409],
           role: 'info',
           note: '이 역할은 GLOBAL_ 태그를 포함하므로 GLOBAL 팀이 아니면 자동 제거됨 — 해당 동작도 확인',
@@ -269,7 +269,7 @@ function buildScenarios(): Scenario[] {
           body: { userId: '__ATTACKER__', roleId: 'ORIGIN' },
           expected: 403,
           role: 'should-block',
-          note: 'GLOBAL_ROLE_ASSIGN이 있어도 manageableBy에 없으면 차단. 또한 비-GLOBAL팀 역할에서 GLOBAL 태그가 자동 제거되었다면 GLOBAL_ROLE_ASSIGN 자체도 없음',
+          note: 'GLOBAL_ROLE_MANAGE가 있어도 manageableBy에 없으면 차단. 또한 비-GLOBAL팀 역할에서 GLOBAL 태그가 자동 제거되었다면 GLOBAL_ROLE_MANAGE 자체도 없음',
         },
         { label: '정리', actor: 'admin', method: 'DELETE', path: `/api/role/define/${LIMITED}`, expected: [200, 204, 404], role: 'info' },
         { label: '정리: 팀 삭제', actor: 'admin', method: 'DELETE', path: `/api/team/${TEAM}`, expected: [200, 204, 404], role: 'info' },

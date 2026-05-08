@@ -197,7 +197,9 @@ export default function App() {
   const permissions = usePermissions(isLoggedIn);
 
   // 모든 접근 제어는 RoleServer 권한 태그 기반으로만 동작
-  const hasAdminUsersAccess = ['GLOBAL_ROLE_VIEW','ROLE_VIEW_OWN','GLOBAL_ROLE_ASSIGN','ROLE_ASSIGN_OWN','GLOBAL_ROLE_REVOKE','ROLE_REVOKE_OWN','GLOBAL_ROLE_CREATE','ROLE_CREATE_OWN','GLOBAL_ROLE_MODIFY','ROLE_MODIFY_OWN','GLOBAL_ROLE_DELETE','ROLE_DELETE_OWN','TEAM_VIEW_ANY','TEAM_MEMBER_VIEW','GLOBAL_TEAM_CREATE','GLOBAL_TEAM_MANAGE','TEAM_MANAGE_OWN','GLOBAL_TEAM_DELETE','TEAM_DELETE_OWN','GLOBAL_CACHE_RELOAD_USER','GLOBAL_CACHE_RELOAD_ALL','GLOBAL_BACKUP_CREATE','GLOBAL_BACKUP_RESTORE','GLOBAL_LOG_VIEW'].some(t => permissions.permissionTags.includes(t));
+  // [v2 통합] CRUD/ASSIGN/REVOKE → MANAGE 통합, GLOBAL_TEAM_CREATE/MANAGE/DELETE → GLOBAL_TEAM_MANAGE,
+  //          TEAM_DELETE_OWN+TEAM_MANAGE_OWN → TEAM_MANAGE_OWN, GLOBAL_CACHE_RELOAD_USER+_ALL → GLOBAL_CACHE_RELOAD
+  const hasAdminUsersAccess = ['GLOBAL_ROLE_VIEW','ROLE_VIEW_OWN','GLOBAL_ROLE_MANAGE','ROLE_MANAGE_OWN','TEAM_VIEW_ANY','TEAM_MEMBER_VIEW','GLOBAL_TEAM_MANAGE','TEAM_MANAGE_OWN','GLOBAL_CACHE_RELOAD','GLOBAL_BACKUP_CREATE','GLOBAL_BACKUP_RESTORE','GLOBAL_LOG_VIEW'].some(t => permissions.permissionTags.includes(t));
   const hasRequestsAccess = permissions.enabledFeatures.includes('GLOBAL_REQUEST_VIEW');
   const hasKnowledgeAccess = ['KNOWLEDGE_CREATE','KNOWLEDGE_MODIFY','KNOWLEDGE_DELETE'].some(t => permissions.enabledFeatures.includes(t));
   // 공지 발송 페이지 — GLOBAL_NOTICE 또는 TEAM_NOTICE_OWN
@@ -446,7 +448,7 @@ export default function App() {
           enabledFeatures={permissions.enabledFeatures}
           permissionTags={permissions.permissionTags}
           onFeatureClick={(key) => {
-            if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE', 'GLOBAL_TEAM_CREATE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_DELETE', 'GLOBAL_BACKUP_CREATE', 'GLOBAL_LOG_VIEW'].includes(key)) navigateTo('admin-users');
+            if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE', 'GLOBAL_TEAM_MANAGE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_DELETE', 'GLOBAL_BACKUP_CREATE', 'GLOBAL_LOG_VIEW'].includes(key)) navigateTo('admin-users');
             if (key === 'GLOBAL_REQUEST_VIEW') navigateTo('requests');
             if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) navigateTo('knowledge');
             if (['NOTICE_PUBLISH', 'NOTICE_EDIT'].includes(key)) navigateTo('notice-board');
@@ -472,7 +474,7 @@ export default function App() {
               enabledFeatures={permissions.enabledFeatures}
               permissionTags={permissions.permissionTags}
               onFeatureClick={(key) => {
-                if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE', 'GLOBAL_TEAM_CREATE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_DELETE', 'GLOBAL_BACKUP_CREATE', 'GLOBAL_LOG_VIEW'].includes(key)) { navigateTo('admin-users'); setMobileMenuOpen(false); }
+                if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE', 'GLOBAL_TEAM_MANAGE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_DELETE', 'GLOBAL_BACKUP_CREATE', 'GLOBAL_LOG_VIEW'].includes(key)) { navigateTo('admin-users'); setMobileMenuOpen(false); }
                 if (key === 'GLOBAL_REQUEST_VIEW') { navigateTo('requests'); setMobileMenuOpen(false); }
                 if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) { navigateTo('knowledge'); setMobileMenuOpen(false); }
                 if (['NOTICE_PUBLISH', 'NOTICE_EDIT'].includes(key)) { navigateTo('notice-board'); setMobileMenuOpen(false); }

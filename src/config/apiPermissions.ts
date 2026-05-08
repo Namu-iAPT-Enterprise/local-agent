@@ -33,7 +33,7 @@ export const APP_FEATURES: AppFeatureDef[] = [
   // 공지 발송 — 글로벌 발행자(GLOBAL_NOTICE) 또는 팀 발행자(TEAM_NOTICE_OWN) 모두 진입
   { id: 'notice-publish', label: '공지 발송', description: '공지 작성 · 수정 · 고정', category: 'notice', icon: Megaphone, requiredFeatureKeys: ['NOTICE_PUBLISH', 'NOTICE_EDIT'] },
   // ── 역할/팀 관리 (GLOBAL 또는 TEAM_SCOPED 권한으로 접근) ──
-  { id: 'admin-users', label: '역할 · 팀 관리', description: '역할 배정 · 정의 · 팀 관리', category: 'admin', icon: Users, requiredFeatureKeys: ['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'GLOBAL_TEAM_CREATE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_MEMBER_VIEW'] },
+  { id: 'admin-users', label: '역할 · 팀 관리', description: '역할 배정 · 정의 · 팀 관리', category: 'admin', icon: Users, requiredFeatureKeys: ['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'GLOBAL_TEAM_MANAGE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_MEMBER_VIEW'] },
   { id: 'admin-requests', label: '문의사항', description: '사용자 문의사항 열람', category: 'request', icon: MailQuestion, requiredFeatureKeys: ['GLOBAL_REQUEST_VIEW'] },
   // ── Admin 탭 전용 (GLOBAL 권한으로만 접근) ──
   { id: 'admin-backup', label: '백업 관리', description: '시스템 백업 관리', category: 'admin', icon: HardDrive, requiredFeatureKeys: ['GLOBAL_BACKUP_CREATE'] },
@@ -83,15 +83,16 @@ export const FEATURE_UI_MAP: Record<string, FeatureUiMeta> = {
   ROLE_DEFINE_CREATE:        { icon: ShieldAlert,          category: 'admin'     },
   ROLE_DEFINE_MODIFY:        { icon: PenLine,              category: 'admin'     },
   ROLE_DEFINE_DELETE:        { icon: TrashIcon,            category: 'admin'     },
-  // Team management
-  GLOBAL_TEAM_CREATE:        { icon: Users2,               category: 'admin'     },
+  // Team management — [v2 통합] GLOBAL_TEAM_CREATE/MANAGE/DELETE → GLOBAL_TEAM_MANAGE
+  GLOBAL_TEAM_MANAGE:        { icon: Users2,               category: 'admin'     },
   TEAM_VIEW:                 { icon: Eye,                  category: 'admin'     },
   TEAM_MEMBER_VIEW:          { icon: UsersIcon,            category: 'admin'     },
   TEAM_MANAGE:               { icon: SlidersHorizontal,    category: 'admin'     },
   TEAM_DELETE:               { icon: TrashIcon,            category: 'admin'     },
   // (TEAM_NOTICE → NOTICE_PUBLISH 로 통합되었음)
-  // Cache & system
-  GLOBAL_CACHE_RELOAD_USER:  { icon: RefreshCw,            category: 'admin'     },
+  // Cache & system — [v2 통합] GLOBAL_CACHE_RELOAD_USER + _ALL → GLOBAL_CACHE_RELOAD
+  // featureKey 자체는 backend ApiSeed에서 _USER/_ALL 변형을 유지(UI에서 라벨 구분용)
+  GLOBAL_CACHE_RELOAD:       { icon: RefreshCw,            category: 'admin'     },
   GLOBAL_CACHE_RELOAD_ALL:   { icon: RefreshCw,            category: 'admin'     },
   GLOBAL_BACKUP_CREATE:      { icon: HardDrive,            category: 'admin'     },
   GLOBAL_BACKUP_RESTORE:     { icon: RotateCcw,            category: 'admin'     },
