@@ -70,6 +70,43 @@
 .hide-scrollbar { scrollbar-width: none; }
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 
+/* ── 공지 본문 (서버 sanitize HTML) — 알림 모달, URGENT 팝업, 발송 페이지 read-only ── */
+.notice-html { line-height: 1.55; }
+.notice-html > *:first-child { margin-top: 0; }
+.notice-html > *:last-child  { margin-bottom: 0; }
+.notice-html h1 { font-size: 1.15rem; font-weight: 700; margin: 0.75rem 0 0.4rem; }
+.notice-html h2 { font-size: 1rem;    font-weight: 700; margin: 0.7rem 0 0.35rem; }
+.notice-html h3 { font-size: 0.92rem; font-weight: 600; margin: 0.6rem 0 0.3rem; }
+.notice-html p  { margin: 0.4rem 0; }
+.notice-html ul, .notice-html ol { margin: 0.4rem 0; padding-left: 1.25rem; }
+.notice-html ul { list-style: disc; }
+.notice-html ol { list-style: decimal; }
+.notice-html li { margin: 0.15rem 0; }
+.notice-html a  { color: rgb(37 99 235); text-decoration: underline; word-break: break-all; }
+.dark .notice-html a { color: rgb(96 165 250); }
+.notice-html code { padding: 0.05rem 0.3rem; border-radius: 0.25rem; background: rgb(243 244 246); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+.dark .notice-html code { background: rgb(31 41 55); }
+.notice-html pre { padding: 0.5rem 0.75rem; border-radius: 0.4rem; background: rgb(243 244 246); overflow-x: auto; margin: 0.5rem 0; }
+.dark .notice-html pre { background: rgb(31 41 55); }
+.notice-html pre code { padding: 0; background: transparent; }
+.notice-html blockquote { border-left: 3px solid rgb(209 213 219); padding-left: 0.75rem; color: rgb(107 114 128); margin: 0.5rem 0; }
+.dark .notice-html blockquote { border-left-color: rgb(75 85 99); color: rgb(156 163 175); }
+.notice-html hr { border: 0; border-top: 1px solid rgb(229 231 235); margin: 0.75rem 0; }
+.dark .notice-html hr { border-top-color: rgb(55 65 81); }
+.notice-html table { border-collapse: collapse; margin: 0.5rem 0; font-size: 0.9em; }
+.notice-html th, .notice-html td { border: 1px solid rgb(209 213 219); padding: 0.3rem 0.5rem; }
+.dark .notice-html th, .dark .notice-html td { border-color: rgb(75 85 99); }
+.notice-html th { background: rgb(249 250 251); font-weight: 600; text-align: left; }
+.dark .notice-html th { background: rgb(31 41 55); }
+.notice-html img { max-width: 100%; height: auto; border-radius: 0.25rem; }
+.notice-html input[type="checkbox"] { margin-right: 0.35rem; accent-color: rgb(245 158 11); }
+
+/* 컴팩트 모드 — 알림 모달 안 */
+.notice-html-compact h1 { font-size: 0.95rem; }
+.notice-html-compact h2 { font-size: 0.88rem; }
+.notice-html-compact h3 { font-size: 0.82rem; }
+.notice-html-compact p, .notice-html-compact li { font-size: 0.78rem; }
+
 /* Chat composer — attachment upload skeleton (visible light + dark; respects motion prefs) */
 :root {
   --composer-shimmer-base: #e5e7eb;

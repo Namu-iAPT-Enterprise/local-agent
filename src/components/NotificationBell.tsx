@@ -258,8 +258,8 @@ function NoticeRow({ notice, onRead }: NoticeRowProps) {
           </div>
           {expanded && (
             <div
-              className="mt-2 text-xs text-gray-600 dark:text-gray-300 prose prose-sm dark:prose-invert max-w-none break-words"
-              // 본문은 서버에서 sanitize된 HTML
+              className="mt-2 notice-html notice-html-compact text-xs text-gray-700 dark:text-gray-200 break-words"
+              // 서버에서 sanitize된 HTML — XSS 안전
               dangerouslySetInnerHTML={{ __html: notice.contentHtml }}
             />
           )}
@@ -296,7 +296,7 @@ function UrgentPopup({ notice, onClose, onRead }: UrgentPopupProps) {
           <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">{notice.title}</h3>
           <p className="text-[11px] text-gray-400 mb-3">{notice.publisherId} · {formatTime(notice.createdAt)}</p>
           <div
-            className="text-sm text-gray-700 dark:text-gray-200 prose prose-sm dark:prose-invert max-w-none break-words"
+            className="notice-html text-sm text-gray-700 dark:text-gray-200 break-words"
             dangerouslySetInnerHTML={{ __html: notice.contentHtml }}
           />
           <div className="mt-4 flex justify-end">

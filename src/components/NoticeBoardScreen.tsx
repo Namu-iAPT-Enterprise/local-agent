@@ -8,6 +8,7 @@ import {
   type NoticeResponse, type NoticeCreateRequest, type NoticePriority, type NoticeTargetType,
 } from '../api/notice';
 import { fetchRoleDefinitions, type RoleDefinitionDto } from '../api/gateway';
+import NoticeMarkdown from './NoticeMarkdown';
 
 interface NoticeBoardScreenProps {
   onBack: () => void;
@@ -85,7 +86,7 @@ export default function NoticeBoardScreen({ onBack, permissionTags }: NoticeBoar
     try {
       const updated = await updateNotice(id, {
         title: req.title,
-        contentHtml: req.contentHtml,
+        contentMd: req.contentMd,
         priority: req.priority,
         targetType: req.targetType,
         targetIds: req.targetIds,
@@ -327,7 +328,7 @@ interface NoticeFormProps {
 
 function NoticeForm({ mode, initial, isGlobal, isTeamOwn, roleDefs, onCancel, onSubmit }: NoticeFormProps) {
   const [title, setTitle] = useState(initial?.title ?? '');
-  const [html, setHtml]   = useState(initial?.contentHtml ?? '');
+  const [md, setMd]       = useState(initial?.contentMd ?? '');
   const [priority, setPriority] = useState<NoticePriority>(initial?.priority ?? 'NORMAL');
   const [targetType, setTargetType] = useState<NoticeTargetType>(initial?.targetType ?? (isGlobal ? 'GLOBAL' : 'TEAM'));
   const [targetIdsRaw, setTargetIdsRaw] = useState<string>((initial?.targetIds ?? []).join(','));
@@ -371,7 +372,7 @@ function NoticeForm({ mode, initial, isGlobal, isTeamOwn, roleDefs, onCancel, on
     try {
       await onSubmit({
         title: title.trim(),
-        contentHtml: html,
+        contentMd: md,
         priority,
         targetType,
         targetIds: targetType === 'GLOBAL' ? [] : targetIds,
@@ -404,24 +405,35 @@ function NoticeForm({ mode, initial, isGlobal, isTeamOwn, roleDefs, onCancel, on
         className="w-full px-3 py-2 mb-3 text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus:border-amber-400"
       />
 
-      {/* HTML editor + preview */}
+      {/* Markdown editor + 클라이언트 미리보기 (서버 박제 전 즉시 피드백) */}
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
-          <label className="text-[11px] text-gray-500 mb-1 block">본문 (HTML)</label>
+          <label className="text-[11px] text-gray-500 mb-1 block">본문 (Markdown · 인라인 HTML 가능)</label>
           <textarea
-            value={html}
-            onChange={(e) => setHtml(e.target.value)}
+            value={md}
+            onChange={(e) => setMd(e.target.value)}
             rows={12}
-            placeholder="<p>HTML 본문을 직접 작성하세요. 위험한 태그는 서버에서 제거됩니다.</p>"
+            placeholder={
+              '## 제목\n\n- 항목 1\n- 항목 2\n\n**강조**, _기울임_, [링크](https://...)\n\n' +
+              '<div style="background:#fef3c7; padding:8px; border-radius:6px;">\n' +
+              '  중간에 <strong>raw HTML</strong>도 섞을 수 있어요. 위험한 태그는 서버에서 제거됩니다.\n' +
+              '</div>'
+            }
             className="w-full px-3 py-2 text-xs font-mono rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus:border-amber-400"
           />
+          <p className="mt-1 text-[10px] text-gray-400">
+            발송 시점에 서버가 sanitize한 HTML로 박제 저장됩니다. 미리보기는 근사치이며 최종 표시는 서버 렌더 결과를 따릅니다.
+          </p>
         </div>
         <div>
-          <label className="text-[11px] text-gray-500 mb-1 block flex items-center gap-1"><Eye size={11}/> 미리보기 (sanitize 전)</label>
-          <div
-            className="w-full h-[218px] overflow-y-auto px-3 py-2 text-sm rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 prose prose-sm dark:prose-invert max-w-none break-words"
-            dangerouslySetInnerHTML={{ __html: html || '<em class="text-gray-400">본문 미리보기</em>' }}
-          />
+          <label className="text-[11px] text-gray-500 mb-1 block flex items-center gap-1"><Eye size={11}/> 미리보기 (클라이언트 렌더)</label>
+          <div className="w-full h-[218px] overflow-y-auto px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40">
+            {md ? (
+              <NoticeMarkdown source={md} compact />
+            ) : (
+              <em className="text-gray-400 text-xs">본문 미리보기</em>
+            )}
+          </div>
         </div>
       </div>
 
@@ -525,7 +537,8 @@ function ReadOnlyView({ notice }: { notice: NoticeResponse }) {
         {notice.publisherId} · {new Date(notice.createdAt).toLocaleString()} · {notice.targetType}
       </div>
       <div
-        className="prose prose-sm dark:prose-invert max-w-none break-words"
+        className="notice-html text-sm text-gray-700 dark:text-gray-200 break-words"
+        // 서버에서 sanitize된 HTML — XSS 안전
         dangerouslySetInnerHTML={{ __html: notice.contentHtml }}
       />
     </div>

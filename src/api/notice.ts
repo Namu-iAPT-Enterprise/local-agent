@@ -17,6 +17,9 @@ export interface NoticeResponse {
   id: string;
   publisherId: string;
   title: string;
+  /** 본문 — CommonMark 마크다운 원본. 편집 화면에서 사용. */
+  contentMd: string;
+  /** 본문 — 발송 시점에 서버가 sanitize한 HTML. 표시(알림/팝업/외부 채널)용. */
   contentHtml: string;
   priority: NoticePriority;
   targetType: NoticeTargetType;
@@ -36,7 +39,7 @@ export interface NoticeResponse {
 
 export interface NoticeCreateRequest {
   title: string;
-  contentHtml: string;
+  contentMd: string;
   priority: NoticePriority;
   targetType: NoticeTargetType;
   /** USER/ROLE/TEAM은 ID 배열, TEAM_ROLE은 "{teamId}:{roleId}" 페어, GLOBAL은 빈 배열 */
@@ -49,7 +52,7 @@ export interface NoticeCreateRequest {
 
 export interface NoticeUpdateRequest {
   title: string;
-  contentHtml: string;
+  contentMd: string;
   priority: NoticePriority;
   targetType: NoticeTargetType;
   targetIds: string[];
