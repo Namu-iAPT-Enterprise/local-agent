@@ -654,8 +654,10 @@ export function useChat() {
         'You are creating a PDF document. Respond with well-structured Markdown. Do NOT output code fences or programming code.\n\n' +
         LLM_MARKDOWN_STRUCTURE_HINT,
       hwpx:
-        'You are drafting content suitable for a Korean 한글 / HWPX document (보고서, 공문, 기안문). Follow the hwpx skill: clear # 제목, **강조**, bullet/numbered lists, formal tone where appropriate. ' +
-        'Do NOT output code fences (```), SQL blocks, XML snippets, or programming code. Output only document content.\n\n' +
+        'You are drafting content suitable for a Korean 한글 / HWPX document (보고서, 공문, 기안문). Follow the hwpx skill with strict Markdown structure. ' +
+        'Use real Markdown headings on their own lines, real bullet/numbered lists, and formal Korean business tone where appropriate. ' +
+        'If the user asks for a table or 표, you MUST output a valid Markdown table with a separator row (|---|---|) and at least one data row. ' +
+        'Do NOT flatten tables into prose or bullets. Do NOT output code fences (```), SQL blocks, XML snippets, or programming code. Output only document content.\n\n' +
         LLM_MARKDOWN_STRUCTURE_HINT,
     };
 
