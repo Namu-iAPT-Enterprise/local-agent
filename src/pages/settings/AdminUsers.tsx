@@ -1134,18 +1134,18 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
 
   const [creating, setCreating]   = useState(false);
   const [editingId, setEditingId] = useState<string|null>(null);
-  const [form, setForm] = useState({ teamId: '', displayName: '', color: '', parentTeamId: '' });
+  const [form, setForm] = useState({ teamId: '', displayName: '', color: '' });
   const [saveSt, setSaveSt]   = useState<'idle'|'loading'|'success'|'error'>('idle');
   const [saveMsg, setSaveMsg] = useState('');
   const [deleteSt, setDeleteSt] = useState<Record<string,'idle'|'loading'>>({});
 
-  const resetForm = () => setForm({ teamId: '', displayName: '', color: '', parentTeamId: '' });
+  const resetForm = () => setForm({ teamId: '', displayName: '', color: '' });
 
   const handleCreate = async () => {
     if (!form.teamId.trim() || !form.displayName.trim()) return;
     setSaveSt('loading'); setSaveMsg('');
     try {
-      await createTeam({ teamId: form.teamId.trim(), displayName: form.displayName.trim(), color: form.color || undefined, parentTeamId: form.parentTeamId || undefined });
+      await createTeam({ teamId: form.teamId.trim(), displayName: form.displayName.trim(), color: form.color || undefined });
       setSaveSt('success'); setSaveMsg(`${form.teamId} 팀 생성 완료`);
       setCreating(false); resetForm(); onRefreshTeams();
     } catch (e: unknown) { setSaveSt('error'); setSaveMsg(e instanceof Error ? e.message : '실패'); }
@@ -1202,20 +1202,11 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
               <input value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="알파팀" className={`${inputCls} mt-1`} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">색상 (선택)</label>
-              <div className="flex items-center gap-2 mt-1">
-                <input type="color" value={form.color || '#3B82F6'} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} className="h-9 w-10 cursor-pointer rounded border border-gray-300 dark:border-gray-600 p-0.5 bg-white dark:bg-gray-800" />
-                <input value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} placeholder="#3B82F6" className={`${inputCls} flex-1`} />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">상위 팀 (선택)</label>
-              <select value={form.parentTeamId} onChange={e => setForm(f => ({ ...f, parentTeamId: e.target.value }))} className={`${inputCls} mt-1`}>
-                <option value="">없음 (최상위)</option>
-                {allTeams.map(t => <option key={t.teamId} value={t.teamId}>{t.teamId} — {t.displayName}</option>)}
-              </select>
+          <div>
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">색상 (선택)</label>
+            <div className="flex items-center gap-2 mt-1">
+              <input type="color" value={form.color || '#3B82F6'} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} className="h-9 w-10 cursor-pointer rounded border border-gray-300 dark:border-gray-600 p-0.5 bg-white dark:bg-gray-800" />
+              <input value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} placeholder="#3B82F6" className={`${inputCls} flex-1`} />
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1243,14 +1234,13 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
                         <Globe size={8} />시스템
                       </span>
                     )}
-                    {team.parentTeamId && <span className="text-[9px] text-gray-400 font-mono">↑{team.parentTeamId}</span>}
                     <span className="text-[9px] text-gray-400">{roleCount}개 역할</span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{team.displayName}</p>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <ActionBtn
-                    onClick={() => { setEditingId(editingId === team.teamId ? null : team.teamId); setForm({ teamId: team.teamId, displayName: team.displayName, color: team.color ?? '', parentTeamId: team.parentTeamId ?? '' }); setSaveSt('idle'); setCreating(false); }}
+                    onClick={() => { setEditingId(editingId === team.teamId ? null : team.teamId); setForm({ teamId: team.teamId, displayName: team.displayName, color: team.color ?? '' }); setSaveSt('idle'); setCreating(false); }}
                     disabled={!canManage}
                     disabledReason="TEAM_MANAGE 권한 필요"
                     variant="ghost" icon={<Pencil size={12} />}

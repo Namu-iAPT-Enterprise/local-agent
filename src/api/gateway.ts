@@ -240,7 +240,6 @@ export interface TeamDto {
   teamId: string;
   displayName: string;
   color?: string;
-  parentTeamId?: string;
   createdBy?: string;
   createdAt?: string;
 }
@@ -249,7 +248,6 @@ export interface TeamRequest {
   teamId?: string;
   displayName?: string;
   color?: string;
-  parentTeamId?: string;
 }
 
 export async function fetchTeams(): Promise<TeamDto[]> {
