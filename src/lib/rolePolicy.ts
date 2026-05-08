@@ -31,6 +31,19 @@ import type { RoleDefinitionDto } from '../api/gateway';
 
 const GLOBAL_TEAM_ID = 'GLOBAL';
 
+/**
+ * ALL 가상 역할 전용의 고유 태그 팀 ID.
+ * UI 는 이 팀 ID 를 인식해 디스코드 {@code @everyone} 스타일로 별도 표기한다.
+ * GLOBAL 팀(시스템 관리자 영역)과 분리되어야 ALL 역할이 시스템 권한 영역에
+ * 섞여 사용자 혼동을 일으키지 않는다.
+ */
+export const DEFAULT_TEAM_ID = '__DEFAULT__';
+
+/** teamId 가 ALL 가상 역할 전용 팀(__DEFAULT__) 인지 판단 */
+export function isDefaultTeam(teamId: string | undefined): boolean {
+  return teamId === DEFAULT_TEAM_ID;
+}
+
 /** 인가 컨텍스트 — 한 번 만들어두고 재사용 */
 export interface PolicyContext {
   /** 요청자가 보유한 역할 ID 목록 */

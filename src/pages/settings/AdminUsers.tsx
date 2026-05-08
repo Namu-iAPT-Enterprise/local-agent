@@ -25,6 +25,7 @@ import {
   canDeleteRole,
   canAssignRole,
   canRevokeRole,
+  isDefaultTeam,
   type PolicyContext,
 } from '../../lib/rolePolicy';
 import { getUserId } from '../../api/auth';
@@ -122,6 +123,26 @@ function RoleTypeBadge({ type }: { type: string }) {
 
 function TeamChip({ team }: { team?: TeamDto }) {
   if (!team) return null;
+
+  // ── 가상 팀(__DEFAULT__): ALL 역할 전용 — 디스코드 @everyone 스타일로 표기 ──
+  // 백엔드는 ALL 가상 역할을 GLOBAL(시스템) 팀이 아닌 고유 태그(__DEFAULT__) 팀에
+  // 매핑한다. UI 는 이 팀 ID 를 인식해 일반 팀 칩과 구분되는 "@All" 멘션 칩으로
+  // 렌더링하여 "모든 사용자에게 자동 부여되는 기본 권한"임을 한눈에 전달한다.
+  if (isDefaultTeam(team.teamId)) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded
+                   bg-violet-100 text-violet-700 hover:bg-violet-200
+                   dark:bg-violet-900/40 dark:text-violet-300 dark:hover:bg-violet-900/60
+                   transition-colors"
+        title="모든 사용자에게 자동으로 부여되는 기본 권한"
+      >
+        <Users size={9} />
+        <span className="font-mono">@All</span>
+      </span>
+    );
+  }
+
   return (
     <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border" style={{
       borderColor: team.color ? team.color + '40' : '#e5e7eb',
@@ -1231,6 +1252,8 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
         {allTeams.length === 0 && <p className="px-5 py-8 text-sm text-center text-gray-400">등록된 팀이 없습니다.</p>}
         {allTeams.map(team => {
           const isGlobal = team.teamId === 'GLOBAL';
+          const isDefault = isDefaultTeam(team.teamId);   // ALL 가상 역할 전용 팀
+          const isVirtual = isGlobal || isDefault;        // 시스템 예약 팀(편집/삭제 제한 대상)
           const roleCount = roleCountMap.get(team.teamId) ?? 0;
           return (
             <React.Fragment key={team.teamId}>
@@ -1244,21 +1267,32 @@ function SectionTeam({ tags, allRoles, allTeams, onRefreshTeams }: {
                         <Globe size={8} />시스템
                       </span>
                     )}
+                    {isDefault && (
+                      <span className="text-[9px] font-bold text-violet-600 dark:text-violet-300 px-1 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 flex items-center gap-0.5">
+                        <Users size={8} />@All · 기본 권한
+                      </span>
+                    )}
                     <span className="text-[9px] text-gray-400">{roleCount}개 역할</span>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{team.displayName}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {isDefault ? '모든 사용자에게 자동으로 부여되는 가상 팀 (ALL 역할 전용)' : team.displayName}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <ActionBtn
                     onClick={() => { setEditingId(editingId === team.teamId ? null : team.teamId); setForm({ teamId: team.teamId, displayName: team.displayName, color: team.color ?? '' }); setSaveSt('idle'); setCreating(false); }}
-                    disabled={!canManage}
-                    disabledReason="TEAM_MANAGE 권한 필요"
+                    disabled={!canManage || isDefault}
+                    disabledReason={isDefault ? '@All 팀은 시스템 예약 팀이라 편집할 수 없습니다' : 'TEAM_MANAGE 권한 필요'}
                     variant="ghost" icon={<Pencil size={12} />}
                   >편집</ActionBtn>
                   <ActionBtn
                     onClick={() => handleDelete(team.teamId)}
-                    disabled={!canDelete || isGlobal}
-                    disabledReason={isGlobal ? 'Global 팀은 삭제할 수 없습니다' : 'TEAM_DELETE 권한 필요'}
+                    disabled={!canDelete || isVirtual}
+                    disabledReason={
+                      isGlobal ? 'Global 팀은 삭제할 수 없습니다' :
+                      isDefault ? '@All 팀은 시스템 예약 팀이라 삭제할 수 없습니다' :
+                      'TEAM_DELETE 권한 필요'
+                    }
                     loading={deleteSt[team.teamId] === 'loading'}
                     variant="danger" icon={<Trash2 size={12} />}
                   >삭제</ActionBtn>
