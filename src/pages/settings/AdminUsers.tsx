@@ -19,6 +19,15 @@ import {
   NotFoundError,
   type RoleDefinitionDto, type TeamDto, type PermissionTagDto, type TeamMemberInfo,
 } from '../../api/gateway';
+import {
+  buildPolicyContext,
+  canModifyRole,
+  canDeleteRole,
+  canAssignRole,
+  canRevokeRole,
+  type PolicyContext,
+} from '../../lib/rolePolicy';
+import { getUserId } from '../../api/auth';
 
 // ── Permission helper ──────────────────────────────────────────────────────────
 
@@ -549,15 +558,13 @@ function SectionMembers({ tags, allRoles, allTeams, myRoleIds = [] }: {
     [allRoles, selectedTeam]
   );
 
-  // 내 해당 팀 최고 priority
-  const myBestPriority = useMemo(() => {
-    let best = Infinity;
-    for (const r of allRoles) {
-      if (myRoleIds.includes(r.roleId) && r.teamId === selectedTeam && r.priority < best)
-        best = r.priority;
-    }
-    return best;
-  }, [allRoles, myRoleIds, selectedTeam]);
+  // OPA Rego 정책(`role.rego`)을 미러링한 인가 컨텍스트.
+  // assign_allow / revoke_allow 동일 의미론으로 priorityLocked 판정.
+  const policyCtx: PolicyContext = useMemo(
+    () => buildPolicyContext(allRoles, myRoleIds),
+    [allRoles, myRoleIds],
+  );
+  const requesterId = getUserId() ?? '';
 
   const loadMembers = async (teamId: string) => {
     if (!teamId) return;
@@ -583,11 +590,11 @@ function SectionMembers({ tags, allRoles, allTeams, myRoleIds = [] }: {
   const handleAddMember = async () => {
     const uid = newUserId.trim();
     if (!uid || !newRoleId) return;
-    // priority 체크: 배정하려는 역할이 내 최고 priority 이하이면 차단
+    // OPA assign_allow 미러링 — GLOBAL_ROLE_MANAGE 또는 팀 스코프 priority 비교
     const role = teamRoles.find(r => r.roleId === newRoleId);
-    if (role && myBestPriority !== Infinity && role.priority <= myBestPriority) {
+    if (role && !canAssignRole(policyCtx, role)) {
       setAddSt('error');
-      setAddMsg(`우선순위 ${role.priority} 역할은 부여할 수 없습니다 (내 최고: ${myBestPriority})`);
+      setAddMsg(`우선순위 ${role.priority} 역할은 부여 권한이 없습니다.`);
       return;
     }
     setAddSt('loading'); setAddMsg('');
@@ -659,7 +666,7 @@ function SectionMembers({ tags, allRoles, allTeams, myRoleIds = [] }: {
                 >
                   <option value="">역할 선택...</option>
                   {teamRoles
-                    .filter(r => myBestPriority === Infinity || r.priority > myBestPriority)
+                    .filter(r => canAssignRole(policyCtx, r))
                     .map(r => (
                       <option key={r.roleId} value={r.roleId}>
                         [{r.priority}] {r.roleId} — {r.displayName}
@@ -705,9 +712,14 @@ function SectionMembers({ tags, allRoles, allTeams, myRoleIds = [] }: {
                     <div className="px-4 pb-3 pt-1 bg-gray-50/50 dark:bg-gray-800/20 space-y-2">
                       {teamRoles.map(role => {
                         const hasRole = member.roleIds.includes(role.roleId);
-                        const priorityLocked = myBestPriority !== Infinity && role.priority <= myBestPriority;
+                        // OPA assign_allow / revoke_allow 미러링.
+                        // revoke 는 자기파괴 금지 체크 포함 (대상이 본인이고 본인 팀 최고 역할이면 차단).
+                        const canAssignThis = canAssignRole(policyCtx, role);
+                        const canRevokeThis = canRevokeRole(policyCtx, role, member.userId, requesterId);
+                        const lockedAssign = !canAssignThis;
+                        const lockedRevoke = !canRevokeThis;
                         return (
-                          <div key={role.roleId} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${hasRole ? 'bg-blue-50/60 dark:bg-blue-900/10' : 'bg-white dark:bg-gray-800/40'} ${priorityLocked ? 'opacity-50' : ''}`}>
+                          <div key={role.roleId} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${hasRole ? 'bg-blue-50/60 dark:bg-blue-900/10' : 'bg-white dark:bg-gray-800/40'} ${(hasRole ? lockedRevoke : lockedAssign) ? 'opacity-50' : ''}`}>
                             <span className="text-[9px] font-mono text-gray-400 w-4 text-center">{role.priority}</span>
                             <div className="flex-1 min-w-0">
                               <span className="font-mono text-xs font-bold text-gray-800 dark:text-gray-200">{role.roleId}</span>
@@ -716,16 +728,16 @@ function SectionMembers({ tags, allRoles, allTeams, myRoleIds = [] }: {
                             {hasRole ? (
                               <ActionBtn
                                 onClick={() => doAction(() => revokeRole(member.userId, role.roleId), `${role.roleId} 제거 완료`)}
-                                disabled={!canRevoke || priorityLocked}
-                                disabledReason={priorityLocked ? '상위 우선순위 역할은 제거 불가' : 'ROLE_REVOKE 권한 필요'}
+                                disabled={!canRevoke || lockedRevoke}
+                                disabledReason={lockedRevoke ? '권한 부족 또는 자기파괴 금지' : 'ROLE_REVOKE 권한 필요'}
                                 loading={actSt === 'loading'}
                                 variant="revoke" icon={<Minus size={10} />}
                               >제거</ActionBtn>
                             ) : (
                               <ActionBtn
                                 onClick={() => doAction(() => assignRole(member.userId, role.roleId), `${role.roleId} 배정 완료`)}
-                                disabled={!canAssign || priorityLocked}
-                                disabledReason={priorityLocked ? '상위 우선순위 역할은 부여 불가' : 'ROLE_ASSIGN 권한 필요'}
+                                disabled={!canAssign || lockedAssign}
+                                disabledReason={lockedAssign ? '권한 부족 또는 우선순위 부족' : 'ROLE_ASSIGN 권한 필요'}
                                 loading={actSt === 'loading'}
                                 variant="assign" icon={<Plus size={10} />}
                               >배정</ActionBtn>
@@ -789,25 +801,15 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
     return map;
   }, [allRoles]);
 
-  /** 내 팀별 최고(최소) priority 계산 */
-  const myBestPriorityByTeam = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const role of allRoles) {
-      if (myRoleIds.includes(role.roleId) && role.teamId) {
-        const cur = map.get(role.teamId) ?? Infinity;
-        if (role.priority < cur) map.set(role.teamId, role.priority);
-      }
-    }
-    return map;
-  }, [allRoles, myRoleIds]);
+  // OPA Rego 정책(`role.rego`)을 미러링한 인가 컨텍스트.
+  // define_modify_allow / define_delete_allow 동일 의미론으로 priorityLocked 판정.
+  const policyCtx: PolicyContext = useMemo(
+    () => buildPolicyContext(allRoles, myRoleIds),
+    [allRoles, myRoleIds],
+  );
 
-  /** 대상 역할을 수정/삭제할 수 있는지 (priority 기반) */
-  const canTouchRole = (role: RoleDefinitionDto): boolean => {
-    if (!role.teamId) return true;
-    const myBest = myBestPriorityByTeam.get(role.teamId);
-    if (myBest === undefined) return true; // 해당 팀에 내 역할 없음 → GLOBAL 권한으로 접근 중
-    return role.priority > myBest;
-  };
+  /** 대상 역할을 수정할 수 있는지 — OPA define_modify_allow 미러링 */
+  const canTouchRole = (role: RoleDefinitionDto): boolean => canModifyRole(policyCtx, role);
 
   const [reorderSt, setReorderSt] = useState<'idle'|'loading'>('idle');
 
@@ -1050,18 +1052,21 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
             <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
               {roles.map((role, idx) => {
                 const isSelfHeld = myRoleIds.includes(role.roleId);
-                const priorityLocked = !canTouchRole(role);
-                const lockReason = priorityLocked ? `우선순위 ${role.priority} — 같거나 상위 역할은 수정/삭제 불가` : '';
+                // OPA define_modify_allow / define_delete_allow 미러링 — 자기 최고 역할/시스템 역할/priority 모두 반영
+                const canModifyThis = canModifyRole(policyCtx, role);
+                const canDeleteThis = canDeleteRole(policyCtx, role);
+                const reorderLocked = !canModifyThis;
+                const lockReason = reorderLocked ? `우선순위 ${role.priority} — 같거나 상위 역할은 수정/삭제 불가` : '';
                 const isFirst = idx === 0;
                 const isLast = idx === roles.length - 1;
                 return (
                 <React.Fragment key={role.roleId}>
-                  <div className={`px-4 py-3 flex items-center gap-3 ${isSelfHeld ? 'bg-amber-50/40 dark:bg-amber-900/5' : ''} ${priorityLocked ? 'opacity-70' : ''}`}>
+                  <div className={`px-4 py-3 flex items-center gap-3 ${isSelfHeld ? 'bg-amber-50/40 dark:bg-amber-900/5' : ''} ${reorderLocked ? 'opacity-70' : ''}`}>
                     {/* Priority 순서 변경 화살표 */}
                     <div className="flex flex-col gap-0.5 flex-shrink-0">
                       <button
                         onClick={() => handleMove(teamId, role.roleId, 'up')}
-                        disabled={isFirst || priorityLocked || reorderSt === 'loading' || role.system}
+                        disabled={isFirst || reorderLocked || reorderSt === 'loading' || role.system}
                         className="p-0.5 rounded text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                         title="위로 이동 (우선순위 높임)"
                       ><ArrowUp size={11} /></button>
@@ -1095,14 +1100,14 @@ function SectionDefine({ tags, allRoles, allTeams, allPermTags, onRefresh, myRol
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <ActionBtn
                         onClick={() => startEdit(role)}
-                        disabled={!canModify || role.system || priorityLocked}
-                        disabledReason={priorityLocked ? lockReason : role.system ? '시스템 역할은 수정할 수 없습니다' : 'ROLE_MODIFY 권한 필요'}
+                        disabled={!canModify || !canModifyThis}
+                        disabledReason={!canModifyThis ? (role.system ? '시스템 역할은 수정할 수 없습니다 (자기파괴 금지)' : lockReason || 'ROLE_MANAGE 권한 필요') : 'ROLE_MANAGE 권한 필요'}
                         variant="ghost" icon={<Pencil size={12} />}
                       >수정</ActionBtn>
                       <ActionBtn
                         onClick={() => handleDelete(role.roleId)}
-                        disabled={!canDelete || role.system || priorityLocked}
-                        disabledReason={priorityLocked ? lockReason : role.system ? '시스템 역할은 삭제할 수 없습니다' : 'ROLE_DELETE 권한 필요'}
+                        disabled={!canDelete || !canDeleteThis}
+                        disabledReason={!canDeleteThis ? (role.system ? '시스템 역할은 삭제할 수 없습니다' : lockReason || 'ROLE_MANAGE 권한 필요') : 'ROLE_MANAGE 권한 필요'}
                         loading={deleteSt[role.roleId] === 'loading'}
                         variant="danger" icon={<Trash2 size={12} />}
                       >삭제</ActionBtn>
