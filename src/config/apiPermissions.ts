@@ -30,8 +30,8 @@ export interface AppFeatureDef {
 export const APP_FEATURES: AppFeatureDef[] = [
   // ── 일반 기능 (TEAM_SCOPED 권한으로 접근) ──
   { id: 'knowledge-manage', label: '지식 관리', description: '지식 RAG 등록 및 수정', category: 'knowledge', icon: BookOpen, requiredFeatureKeys: ['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'] },
-  { id: 'notice-role', label: '역할 공지', description: '특정 역할 대상 공지 발송', category: 'notice', icon: Megaphone, requiredFeatureKeys: ['GLOBAL_NOTICE_SEND_ROLE'] },
-  { id: 'notice-all', label: '전체 공지', description: '전체 사용자 공지 발송', category: 'notice', icon: Bell, requiredFeatureKeys: ['GLOBAL_NOTICE_SEND_ALL'] },
+  // 공지 발송 — 글로벌 발행자(GLOBAL_NOTICE) 또는 팀 발행자(TEAM_NOTICE_OWN) 모두 진입
+  { id: 'notice-publish', label: '공지 발송', description: '공지 작성 · 수정 · 고정', category: 'notice', icon: Megaphone, requiredFeatureKeys: ['NOTICE_PUBLISH', 'NOTICE_EDIT'] },
   // ── 역할/팀 관리 (GLOBAL 또는 TEAM_SCOPED 권한으로 접근) ──
   { id: 'admin-users', label: '역할 · 팀 관리', description: '역할 배정 · 정의 · 팀 관리', category: 'admin', icon: Users, requiredFeatureKeys: ['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'GLOBAL_TEAM_CREATE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_MEMBER_VIEW'] },
   { id: 'admin-requests', label: '문의사항', description: '사용자 문의사항 열람', category: 'request', icon: MailQuestion, requiredFeatureKeys: ['GLOBAL_REQUEST_VIEW'] },
@@ -65,11 +65,14 @@ export const FEATURE_UI_MAP: Record<string, FeatureUiMeta> = {
   KNOWLEDGE_CREATE:          { icon: BookPlus,             category: 'knowledge' },
   KNOWLEDGE_MODIFY:          { icon: FileEdit,             category: 'knowledge' },
   KNOWLEDGE_DELETE:          { icon: TrashIcon,            category: 'knowledge' },
-  // Notice
-  GLOBAL_NOTICE_SEND_ROLE:   { icon: Megaphone,            category: 'notice'    },
-  GLOBAL_NOTICE_UPDATE:      { icon: PenLine,              category: 'notice'    },
-  GLOBAL_NOTICE_SEND_ALL:    { icon: Bell,                 category: 'notice'    },
-  GLOBAL_NOTICE_UPDATE_ALL:  { icon: PenLine,              category: 'notice'    },
+  // Notice (v3.0 통합)
+  NOTICE_VIEW:               { icon: Bell,                 category: 'notice'    },
+  NOTICE_VIEW_DETAIL:        { icon: Bell,                 category: 'notice'    },
+  NOTICE_PUBLISH:            { icon: Megaphone,            category: 'notice'    },
+  NOTICE_EDIT:               { icon: PenLine,              category: 'notice'    },
+  NOTICE_DELETE:             { icon: TrashIcon,            category: 'notice'    },
+  NOTICE_READ:               { icon: Eye,                  category: 'notice'    },
+  NOTICE_PIN:                { icon: Megaphone,            category: 'notice'    },
   // Role management
   ROLE_PROFILE_VIEW:         { icon: Eye,                  category: 'admin'     },
   ADMIN_USERS:               { icon: Users,                category: 'admin'     },
@@ -86,7 +89,7 @@ export const FEATURE_UI_MAP: Record<string, FeatureUiMeta> = {
   TEAM_MEMBER_VIEW:          { icon: UsersIcon,            category: 'admin'     },
   TEAM_MANAGE:               { icon: SlidersHorizontal,    category: 'admin'     },
   TEAM_DELETE:               { icon: TrashIcon,            category: 'admin'     },
-  TEAM_NOTICE:               { icon: Megaphone,            category: 'admin'     },
+  // (TEAM_NOTICE → NOTICE_PUBLISH 로 통합되었음)
   // Cache & system
   GLOBAL_CACHE_RELOAD_USER:  { icon: RefreshCw,            category: 'admin'     },
   GLOBAL_CACHE_RELOAD_ALL:   { icon: RefreshCw,            category: 'admin'     },

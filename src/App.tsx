@@ -9,6 +9,8 @@ import AdminUsersScreen from './components/AdminUsersScreen';
 import SecurityTestPage from './pages/SecurityTestPage';
 import RequestsScreen from './components/RequestsScreen';
 import KnowledgeScreen from './components/KnowledgeScreen';
+import NotificationBell from './components/NotificationBell';
+import NoticeBoardScreen from './components/NoticeBoardScreen';
 import { useTheme } from './context/ThemeContext';
 import { useLang } from './context/LanguageContext';
 import {
@@ -43,8 +45,8 @@ import { AssistantChatIntro } from './components/chat/AssistantChatIntro';
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-type AppPage = 'login' | 'signup' | 'home' | 'settings' | 'admin-users' | 'requests' | 'knowledge' | 'security-test';
-const APP_PAGE_HASHES: readonly AppPage[] = ['login', 'signup', 'home', 'settings', 'admin-users', 'requests', 'knowledge', 'security-test'];
+type AppPage = 'login' | 'signup' | 'home' | 'settings' | 'admin-users' | 'requests' | 'knowledge' | 'security-test' | 'notice-board';
+const APP_PAGE_HASHES: readonly AppPage[] = ['login', 'signup', 'home', 'settings', 'admin-users', 'requests', 'knowledge', 'security-test', 'notice-board'];
 function isAppPage(hash: string): hash is AppPage {
   return (APP_PAGE_HASHES as readonly string[]).includes(hash);
 }
@@ -198,6 +200,8 @@ export default function App() {
   const hasAdminUsersAccess = ['GLOBAL_ROLE_VIEW','ROLE_VIEW_OWN','GLOBAL_ROLE_ASSIGN','ROLE_ASSIGN_OWN','GLOBAL_ROLE_REVOKE','ROLE_REVOKE_OWN','GLOBAL_ROLE_CREATE','ROLE_CREATE_OWN','GLOBAL_ROLE_MODIFY','ROLE_MODIFY_OWN','GLOBAL_ROLE_DELETE','ROLE_DELETE_OWN','TEAM_VIEW_ANY','TEAM_MEMBER_VIEW','GLOBAL_TEAM_CREATE','GLOBAL_TEAM_MANAGE','TEAM_MANAGE_OWN','GLOBAL_TEAM_DELETE','TEAM_DELETE_OWN','GLOBAL_CACHE_RELOAD_USER','GLOBAL_CACHE_RELOAD_ALL','GLOBAL_BACKUP_CREATE','GLOBAL_BACKUP_RESTORE','GLOBAL_LOG_VIEW'].some(t => permissions.permissionTags.includes(t));
   const hasRequestsAccess = permissions.enabledFeatures.includes('GLOBAL_REQUEST_VIEW');
   const hasKnowledgeAccess = ['KNOWLEDGE_CREATE','KNOWLEDGE_MODIFY','KNOWLEDGE_DELETE'].some(t => permissions.enabledFeatures.includes(t));
+  // 공지 발송 페이지 — GLOBAL_NOTICE 또는 TEAM_NOTICE_OWN
+  const hasNoticeBoardAccess = ['GLOBAL_NOTICE', 'TEAM_NOTICE_OWN'].some(t => permissions.permissionTags.includes(t));
 
   useEffect(() => {
     const handler = () => { clear(); navigateTo('login'); };
@@ -385,6 +389,15 @@ export default function App() {
     return <KnowledgeScreen onBack={() => navigateTo('home')} />;
   }
 
+  if (page === 'notice-board') {
+    if (permissions.status === 'idle' || permissions.status === 'loading') return null;
+    if (!hasNoticeBoardAccess) {
+      navigateTo('home');
+      return null;
+    }
+    return <NoticeBoardScreen onBack={() => navigateTo('home')} permissionTags={permissions.permissionTags} />;
+  }
+
   const hasMessages = messages.length > 0;
 
   const chatInputProps = {
@@ -436,6 +449,7 @@ export default function App() {
             if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE', 'GLOBAL_TEAM_CREATE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_DELETE', 'GLOBAL_BACKUP_CREATE', 'GLOBAL_LOG_VIEW'].includes(key)) navigateTo('admin-users');
             if (key === 'GLOBAL_REQUEST_VIEW') navigateTo('requests');
             if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) navigateTo('knowledge');
+            if (['NOTICE_PUBLISH', 'NOTICE_EDIT'].includes(key)) navigateTo('notice-board');
           }}
           userId={getUserId()}
           onRefreshPermissions={() => permissions.reload()}
@@ -461,6 +475,7 @@ export default function App() {
                 if (['ADMIN_USERS', 'ROLE_ASSIGN', 'ROLE_DEFINE_CREATE', 'ROLE_VIEW', 'ROLE_REVOKE', 'GLOBAL_TEAM_CREATE', 'TEAM_MANAGE', 'TEAM_VIEW', 'TEAM_DELETE', 'GLOBAL_BACKUP_CREATE', 'GLOBAL_LOG_VIEW'].includes(key)) { navigateTo('admin-users'); setMobileMenuOpen(false); }
                 if (key === 'GLOBAL_REQUEST_VIEW') { navigateTo('requests'); setMobileMenuOpen(false); }
                 if (['KNOWLEDGE_CREATE', 'KNOWLEDGE_MODIFY', 'KNOWLEDGE_DELETE'].includes(key)) { navigateTo('knowledge'); setMobileMenuOpen(false); }
+                if (['NOTICE_PUBLISH', 'NOTICE_EDIT'].includes(key)) { navigateTo('notice-board'); setMobileMenuOpen(false); }
               }}
               userId={getUserId()}
               onRefreshPermissions={() => permissions.reload()}
@@ -482,7 +497,12 @@ export default function App() {
               <Menu size={20} />
             </button>
             <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">NAMU LA</span>
-            <div className="w-9" />
+            <NotificationBell enabled={isLoggedIn} />
+          </div>
+
+          {/* 데스크톱 — 우상단 떠있는 알람 벨 */}
+          <div className="hidden md:block absolute top-3 right-4 z-30">
+            <NotificationBell enabled={isLoggedIn} />
           </div>
 
           {hasMessages ? (
